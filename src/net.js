@@ -86,6 +86,19 @@
     };
   }
 
+  // Avisa cuando se arma una partida para este jugador (salas privadas). Devuelve cómo dejar de escuchar.
+  function watchMatch(db, uid, cb) {
+    const ref = db.ref('matches/' + uid);
+    const fn = (snap) => {
+      const id = snap.val();
+      if (!id) return;
+      ref.remove();
+      cb(id);
+    };
+    ref.on('value', fn);
+    return () => ref.off('value', fn);
+  }
+
   function loadRoom(db, roomId) {
     return db.ref('rooms/' + roomId).once('value').then((s) => s.val());
   }
@@ -250,7 +263,7 @@
     return { players, sendInput, view, takeEvents, hostLost, stop };
   }
 
-  const api = { NEED, STALE_MS, HOST_LOST_MS, COUNTDOWN_MS, joinQueue, loadRoom, createHost, createClient, encode, decode };
+  const api = { NEED, STALE_MS, HOST_LOST_MS, COUNTDOWN_MS, joinQueue, watchMatch, loadRoom, createHost, createClient, encode, decode };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Net = api;
 })(typeof window !== 'undefined' ? window : globalThis);

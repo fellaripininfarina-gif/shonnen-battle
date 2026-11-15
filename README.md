@@ -13,6 +13,8 @@ Menú:
 - **Jugar**: 1v1 y 2v2. Cada uno tiene "online" y "Vs la computadora".
   - Vs la computadora no requiere cuenta.
   - Online requiere registrarse (usuario y contraseña) y busca partida con otros jugadores.
+  - **Amigos → Crear sala**: sala privada. El anfitrión invita amigos conectados, elige 1v1 o 2v2 y empieza; cada jugador elige su luchador y su equipo. En 2v2 la computadora completa los lugares libres (por ejemplo, dos amigos en el mismo equipo contra 2 CPU). Al terminar la partida todos vuelven a la sala.
+- **Amigos**: agregar por usuario (el otro jugador tiene que aceptar), ver quién está conectado, aceptar o rechazar solicitudes.
 - **Novedades**: registro de cambios, una entrada por fecha (`src/news.js`).
 
 | Acción | Control |
@@ -55,6 +57,7 @@ o por separado:
 ```
 node test/sim.js     # simulación IA vs IA en 1v1 y 2v2
 node test/net.js     # emparejamiento y partidas online con una base de datos simulada
+node test/social.js  # amigos, invitaciones y salas privadas
 node test/smoke.js   # menú y modos contra la computadora con un navegador simulado
 node test/e2e.js     # menú + cuenta + partida online completa (anfitrión y cliente)
 ```
@@ -66,6 +69,7 @@ Las pruebas online usan una base de datos simulada (`test/fakedb.js`); no tocan 
 - `src/game.js`: lógica pura (sin DOM), testeable en Node. Soporta N luchadores en 2 equipos.
 - `src/net.js`: cola de partidas, sala, anfitrión y cliente sobre Realtime Database.
 - `src/auth.js`: cuentas con usuario y contraseña.
+- `src/social.js`: amigos, invitaciones y salas privadas.
 - `src/config.js`: configuración pública de Firebase.
 - `src/main.js`: menú, dibujo, entrada y bucle principal.
 - `src/news.js`: novedades.

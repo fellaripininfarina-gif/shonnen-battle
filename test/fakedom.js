@@ -21,7 +21,8 @@ function install() {
   const mk = (attr, vals) => vals.map((v) => { const b = el(); b.dataset[attr] = v; return b; });
   const modeButtons = mk('mode', ['1v1', '2v2']);
   const onlineButtons = mk('online', ['1v1', '2v2']);
-  const tabButtons = mk('tab', ['play', 'news']);
+  const tabButtons = mk('tab', ['play', 'friends', 'news']);
+  const partyModeButtons = mk('pmode', ['1v1', '2v2']);
   function q(sel) {
     if (!els[sel]) { els[sel] = el(); if (sel === '#c') els[sel].getContext = () => ctx; }
     return els[sel];
@@ -29,7 +30,8 @@ function install() {
   global.window = globalThis;
   global.document = {
     querySelector: q,
-    querySelectorAll: (s) => (s === '[data-mode]' ? modeButtons : s === '[data-online]' ? onlineButtons : s === 'nav button' ? tabButtons : []),
+    querySelectorAll: (s) => (s === '[data-mode]' ? modeButtons : s === '[data-online]' ? onlineButtons
+      : s === '[data-pmode]' ? partyModeButtons : s === 'nav button' ? tabButtons : []),
     createElement: el,
   };
   global.addEventListener = (t, fn) => { (listeners[t] = listeners[t] || []).push(fn); };
@@ -38,6 +40,6 @@ function install() {
   const fire = (t, ev) => (listeners[t] || []).forEach((fn) => fn(ev));
   let t = 0;
   const frame = () => { t += 1000 / 60; const f = raf; raf = null; f(t); };
-  return { q, modeButtons, onlineButtons, tabButtons, fire, frame, texts, key: (code) => fire('keydown', { code, preventDefault() {} }) };
+  return { q, modeButtons, onlineButtons, tabButtons, partyModeButtons, fire, frame, texts, key: (code) => fire('keydown', { code, preventDefault() {} }) };
 }
 module.exports = { install };

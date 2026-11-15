@@ -1,7 +1,7 @@
 // Menú (HTML), cuentas, partidas online, render, input y bucle principal (navegador).
 (function () {
   const { W, H, FR, CHARS, BEAM_COST, makeRoster, createGame, step, aiInput } = window.Game;
-  const Auth = window.Auth, Net = window.Net;
+  const Auth = window.Auth, Net = window.Net, Social = window.Social;
   const $ = (s) => document.querySelector(s);
   const canvas = $('#c'), ctx = canvas.getContext('2d');
   canvas.width = W; canvas.height = H;
@@ -13,13 +13,18 @@
   let online = null;   // { role: 'host'|'client', host|client, myIdx }
   let search = null;   // búsqueda de partida en curso
   let youId = 0;       // índice de mi luchador
+  let session = null;  // amigos, solicitudes, invitaciones y presencia del jugador con sesión
+  let party = null;    // sala privada en la que estoy: { id, isHost, data, unwatch, stopMatch }
+  let myChar = 0;      // luchador elegido para las salas privadas
 
   // ---------- pestañas ----------
   function showTab(name) {
     document.querySelectorAll('nav button').forEach((b) => b.classList.toggle('on', b.dataset.tab === name));
     $('#tab-play').hidden = name !== 'play';
+    $('#tab-friends').hidden = name !== 'friends';
     $('#tab-news').hidden = name !== 'news';
     $('#tab-auth').hidden = name !== 'auth';
+    if (name === 'friends') renderFriends();
   }
   document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => { cancelSearch(); showTab(b.dataset.tab); }));
 
@@ -54,11 +59,14 @@
       b.addEventListener('click', () => choose(i));
       box.appendChild(b);
     });
-    $('#modes').hidden = true; $('#pick').hidden = false; $('#lobby').hidden = true;
+    $('#modes').hidden = true; $('#pick').hidden = false; $('#lobby').hidden = true; $('#party').hidden = true;
   }
+  // Pantalla inicial de Jugar: los modos, o la sala privada si estoy en una.
   function closePicker() {
     pendingMode = null; pendingOnline = false;
-    $('#modes').hidden = false; $('#pick').hidden = true; $('#lobby').hidden = true;
+    $('#modes').hidden = !!party; $('#party').hidden = !party;
+    $('#pick').hidden = true; $('#lobby').hidden = true;
+    if (party) renderParty();
   }
   function choose(i) { if (pendingOnline) startSearch(pendingMode, i); else start(pendingMode, i); }
 
@@ -120,8 +128,215 @@
       b.title = b.disabled ? 'El modo online no está disponible ahora (no se pudo conectar con Firebase).' : '';
     });
   }
-  if (Auth) { Auth.init(); Auth.onChange(() => { refreshUser(); }); }
+  if (Auth) {
+    Auth.init();
+    Auth.onChange((u) => { refreshUser(); if (u) startSession(u); else stopSession(); });
+  }
   refreshOnlineButtons(); refreshUser();
+
+  // ---------- amigos, invitaciones y salas privadas ----------
+  const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; };
+  const mini = (text, fn, cls) => { const b = el('button', 'mini' + (cls ? ' ' + cls : ''), text); b.type = 'button'; b.addEventListener('click', fn); return b; };
+  const friendEntries = () => Object.entries((session && session.friends) || {}).sort((a, b) => (a[1].name < b[1].name ? -1 : 1));
+  const partyOf = () => (party && party.data) || null;
+
+  function startSession(user) {
+    stopSession();
+    const db = Auth.db();
+    session = { user, unsubs: [], presUnsubs: {}, friends: {}, requests: {}, invites: {}, presence: {}, profile: Social.ensureProfile(db, user) };
+    session.profile.ready.catch(() => {});
+    const w = (path, fn) => session.unsubs.push(Social.watch(db, path, fn));
+    w('friends/' + user.uid, (v) => { session.friends = v || {}; syncPresence(); renderFriends(); renderParty(); });
+    w('requests/' + user.uid, (v) => { session.requests = v || {}; renderFriends(); });
+    w('invites/' + user.uid, (v) => { session.invites = v || {}; renderInvites(); });
+    $('#createParty').disabled = false;
+    renderFriends(); renderInvites();
+  }
+  function stopSession() {
+    if (party) leaveParty(false);
+    if (!session) return;
+    session.unsubs.forEach((f) => f());
+    Object.values(session.presUnsubs).forEach((f) => f());
+    session.profile.stop();
+    session = null;
+    $('#createParty').disabled = true;
+    renderFriends(); renderInvites();
+    if (scene === 'menu') closePicker();
+  }
+  function syncPresence() {
+    const db = Auth.db(), ids = friendEntries().map(([uid]) => uid);
+    ids.forEach((uid) => {
+      if (session.presUnsubs[uid]) return;
+      session.presUnsubs[uid] = Social.watch(db, 'presence/' + uid, (v) => {
+        session.presence[uid] = !!v; renderFriends(); renderParty();
+      });
+    });
+    Object.keys(session.presUnsubs).forEach((uid) => {
+      if (!ids.includes(uid)) { session.presUnsubs[uid](); delete session.presUnsubs[uid]; delete session.presence[uid]; }
+    });
+  }
+
+  function renderInvites() {
+    const box = $('#invites'); box.textContent = '';
+    if (!session) return;
+    Object.entries(session.invites).forEach(([fromUid, inv]) => {
+      const row = el('div', 'invite');
+      row.appendChild(el('span', '', inv.name + ' te invitó a su sala'));
+      const btns = el('span', 'btns');
+      btns.append(
+        mini('Unirse', () => acceptInvite(fromUid, inv), 'on'),
+        mini('Rechazar', () => Social.clearInvite(Auth.db(), session.user, fromUid)),
+      );
+      row.appendChild(btns); box.appendChild(row);
+    });
+  }
+  async function acceptInvite(fromUid, inv) {
+    const db = Auth.db(), u = session.user;
+    try {
+      if (party) await leaveParty(false);
+      await Social.joinParty(db, u, inv.party, myChar);
+      if (!session) return;
+      await Social.clearInvite(db, u, fromUid);
+      enterParty(inv.party, false);
+      showTab('play');
+    } catch (e) {
+      Social.clearInvite(db, u, fromUid);
+      setMsg(e.message || 'No se pudo entrar a la sala.'); showTab('play');
+    }
+  }
+
+  function renderFriends() {
+    const fl = $('#friendList'), rl = $('#reqList');
+    fl.textContent = ''; rl.textContent = '';
+    if (!session) {
+      fl.appendChild(el('p', 'empty', 'Ingresá con tu cuenta para ver y agregar amigos.'));
+      rl.appendChild(el('p', 'empty', '—'));
+      return;
+    }
+    const reqs = Object.entries(session.requests);
+    if (!reqs.length) rl.appendChild(el('p', 'empty', 'No tenés solicitudes pendientes.'));
+    reqs.forEach(([uid, r]) => {
+      const row = el('div', 'row'); row.appendChild(el('span', 'who', r.name));
+      const btns = el('span', 'btns');
+      btns.append(
+        mini('Aceptar', () => Social.acceptRequest(Auth.db(), session.user, uid, r.name), 'on'),
+        mini('Rechazar', () => Social.declineRequest(Auth.db(), session.user, uid)),
+      );
+      row.appendChild(btns); rl.appendChild(row);
+    });
+    const fr = friendEntries();
+    if (!fr.length) fl.appendChild(el('p', 'empty', 'Todavía no agregaste amigos.'));
+    fr.forEach(([uid, f]) => {
+      const row = el('div', 'row');
+      const who = el('span', 'who');
+      who.append(el('span', 'pres' + (session.presence[uid] ? ' on' : '')), el('span', '', f.name + (session.presence[uid] ? '' : ' (desconectado)')));
+      const btns = el('span', 'btns');
+      if (party && party.isHost) btns.appendChild(mini('Invitar a la sala', () => invite(uid, f.name)));
+      btns.appendChild(mini('Eliminar', () => Social.removeFriend(Auth.db(), session.user, uid)));
+      row.append(who, btns); fl.appendChild(row);
+    });
+  }
+  $('#friendForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const msg = $('#friendMsg'); msg.textContent = '';
+    if (!session) { msg.textContent = 'Ingresá con tu cuenta primero.'; return; }
+    try {
+      const r = await Social.sendRequest(Auth.db(), session.user, $('#friendName').value);
+      $('#friendName').value = '';
+      msg.textContent = r === 'accepted' ? '¡Ya son amigos!' : 'Solicitud enviada. Cuando la acepte, aparece en tu lista.';
+    } catch (err) { msg.textContent = err.message || 'No se pudo enviar la solicitud.'; }
+  });
+
+  // --- sala privada ---
+  function enterParty(id, isHost) {
+    const db = Auth.db(), uid = session.user.uid;
+    party = { id, isHost, data: null };
+    party.unwatch = Social.watch(db, 'parties/' + id, (v) => {
+      if (!party || party.id !== id) return;
+      if (!v || !v.members || !v.members[uid]) { // se cerró la sala o me sacaron
+        const closed = !v;
+        leaveParty(true); toMenu(closed ? 'La sala se cerró.' : 'Te sacaron de la sala.'); return;
+      }
+      party.data = v; renderParty(); renderFriends();
+    });
+    party.stopMatch = Net.watchMatch(db, uid, (roomId) => enterOnline(roomId));
+    closePicker();
+  }
+  // Sale de la sala: deja de escuchar y avisa a la base de datos (salvo que la sala ya no exista).
+  // La pantalla la actualiza quien llama (toMenu / closePicker).
+  async function leaveParty(alreadyGone) {
+    if (!party) return;
+    const p = party; party = null;
+    p.unwatch(); p.stopMatch();
+    if (!alreadyGone && session) {
+      try { await Social.leaveParty(Auth.db(), session.user, p.id, p.isHost); } catch (e) { /* ignorar */ }
+    }
+  }
+  async function createRoom() {
+    if (!session) { showAuth(null); return; }
+    try {
+      const id = await Social.createParty(Auth.db(), session.user, myChar);
+      enterParty(id, true);
+    } catch (e) { setMsg(e.message || 'No se pudo crear la sala.'); }
+  }
+  async function invite(uid, name) {
+    if (!party) return;
+    try { await Social.sendInvite(Auth.db(), session.user, uid, party.id); $('#partyMsg').textContent = 'Invitación enviada a ' + name + '.'; }
+    catch (e) { $('#partyMsg').textContent = 'No se pudo invitar: ' + (e.message || e); }
+  }
+
+  function renderParty() {
+    const d = partyOf();
+    if (!party || !d) return;
+    const db = Auth.db(), me = session.user, isHost = party.isHost;
+    $('#partyTitle').textContent = 'Sala de ' + d.hostName;
+    document.querySelectorAll('[data-pmode]').forEach((b) => {
+      b.classList.toggle('on', b.dataset.pmode === d.mode);
+      b.disabled = !isHost;
+    });
+    const box = $('#partyMembers'); box.textContent = '';
+    Object.entries(d.members).sort((a, b) => a[1].t - b[1].t).forEach(([uid, m]) => {
+      const row = el('div', 'row'), mine = uid === me.uid;
+      row.appendChild(el('span', 'who', (uid === d.host ? '👑 ' : '') + m.name + (mine ? ' (vos)' : '')));
+      const btns = el('span', 'btns');
+      if (mine) {
+        const sel = document.createElement('select');
+        CHARS.forEach((c, i) => { const o = el('option', '', c.name); o.value = String(i); sel.appendChild(o); });
+        sel.value = String(m.char);
+        sel.addEventListener('change', () => { myChar = +sel.value; Social.setMember(db, party.id, uid, { char: myChar }); });
+        btns.appendChild(sel);
+      } else btns.appendChild(el('span', 'empty', CHARS[m.char].name));
+      const tb = mini('Equipo ' + (m.team === 1 ? '2' : '1'), () => { if (mine) Social.setMember(db, party.id, uid, { team: m.team === 1 ? 0 : 1 }); }, 't' + (m.team === 1 ? 1 : 0));
+      tb.disabled = !mine; btns.appendChild(tb);
+      if (isHost && !mine) btns.appendChild(mini('Sacar', () => Social.kick(db, party.id, uid)));
+      row.appendChild(btns); box.appendChild(row);
+    });
+    // amigos para invitar (solo el anfitrión)
+    $('#partyInviteBox').hidden = !isHost;
+    const pf = $('#partyFriends'); pf.textContent = '';
+    if (isHost) {
+      const fr = friendEntries().filter(([uid]) => !d.members[uid]);
+      if (!fr.length) pf.appendChild(el('p', 'empty', 'No hay amigos para invitar. Agregalos en la pestaña Amigos.'));
+      fr.forEach(([uid, f]) => {
+        const row = el('div', 'row'), on = !!session.presence[uid];
+        const who = el('span', 'who'); who.append(el('span', 'pres' + (on ? ' on' : '')), el('span', '', f.name));
+        const b = mini('Invitar', () => invite(uid, f.name), 'on'); b.disabled = !on; b.title = on ? '' : 'Tu amigo no está conectado';
+        row.append(who, b); pf.appendChild(row);
+      });
+    }
+    const issue = Social.partyIssue(d);
+    $('#partyStart').hidden = !isHost; $('#partyStart').disabled = !!issue;
+    if (!$('#partyMsg').textContent || /^(Hace falta|En 1v1|En 2v2)/.test($('#partyMsg').textContent)) $('#partyMsg').textContent = issue || '';
+  }
+  document.querySelectorAll('[data-pmode]').forEach((b) => b.addEventListener('click', () => { if (party && party.isHost) Social.setMode(Auth.db(), party.id, b.dataset.pmode); }));
+  $('#partyStart').addEventListener('click', async () => {
+    if (!party || !party.data) return;
+    $('#partyMsg').textContent = '';
+    try { await Social.startParty(Auth.db(), party.id, party.data); }
+    catch (e) { $('#partyMsg').textContent = e.message || 'No se pudo empezar.'; }
+  });
+  $('#partyLeave').addEventListener('click', async () => { await leaveParty(false); toMenu(); });
+  $('#createParty').addEventListener('click', createRoom);
 
   // ---------- búsqueda de partida online ----------
   function setLobby(text) { $('#lobbyMsg').textContent = text; }
@@ -156,7 +371,10 @@
       fx = []; shake = 0; mouse.down = mouse.right = false;
       scene = 'play';
       $('#ui').hidden = true; canvas.hidden = false;
-    }).catch((e) => setLobby('No se pudo entrar a la partida: ' + (e && e.message ? e.message : e)));
+    }).catch((e) => {
+      const text = 'No se pudo entrar a la partida: ' + (e && e.message ? e.message : e);
+      setLobby(text); setMsg(text);
+    });
   }
 
   function leaveOnline() {

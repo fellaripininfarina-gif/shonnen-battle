@@ -2,6 +2,7 @@
   "rules": {
     ".read": false,
     ".write": false,
+
     "queue": {
       "$mode": {
         ".read": "auth != null",
@@ -22,6 +23,61 @@
         ".read": "auth != null",
         ".write": "auth != null && (!data.exists() || data.child('host').val() === auth.uid)",
         "inputs": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        }
+      }
+    },
+
+    "users": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "usernames": {
+      "$name": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.val() === auth.uid)",
+        ".validate": "newData.val() === auth.uid"
+      }
+    },
+    "presence": {
+      "$uid": {
+        ".read": "auth != null",
+        ".write": "auth != null && auth.uid === $uid"
+      }
+    },
+    "friends": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        "$friend": {
+          ".write": "auth != null && (auth.uid === $uid || (auth.uid === $friend && (!newData.exists() || root.child('requests').child($friend).child($uid).exists())))"
+        }
+      }
+    },
+    "requests": {
+      "$to": {
+        ".read": "auth != null && auth.uid === $to",
+        "$from": {
+          ".write": "auth != null && (auth.uid === $from || auth.uid === $to)"
+        }
+      }
+    },
+    "invites": {
+      "$to": {
+        ".read": "auth != null && auth.uid === $to",
+        "$from": {
+          ".write": "auth != null && ((auth.uid === $from && root.child('friends').child($from).child($to).exists()) || auth.uid === $to)"
+        }
+      }
+    },
+    "parties": {
+      "$party": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.child('host').val() === auth.uid)",
+        "members": {
           "$uid": {
             ".write": "auth != null && auth.uid === $uid"
           }

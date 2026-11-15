@@ -30,7 +30,8 @@ global.firebase = { apps: [], initializeApp() { this.apps.push(1); }, auth: () =
 
 const Game = require('../src/game.js');
 const Net = require('../src/net.js');
-window.Game = Game; window.Auth = require('../src/auth.js'); window.Net = Net;
+const Social = require('../src/social.js');
+window.Game = Game; window.Auth = require('../src/auth.js'); window.Net = Net; window.Social = Social;
 require('../src/config.js');
 require('../src/news.js');
 require('../src/main.js');
@@ -130,6 +131,108 @@ const submit = async () => { await dom.q('#authForm').handlers.submit({ preventD
   console.log('ok cliente: resultado en pantalla →', lastResult);
   dom.key('Enter');
   assert.strictEqual(dom.q('#ui').hidden, false, 'Enter vuelve al menú');
+
+  // ================= amigos y salas privadas =================
+  assert.strictEqual(dom.q('#createParty').disabled, false, 'con sesión se puede crear una sala');
+  const brunoH = db.client('bruno'), bruno = { uid: 'uid-b-bruno', name: 'bruno' };
+  Social.ensureProfile(brunoH, bruno);
+  await db.settle();
+
+  // --- agregar amigo desde la pestaña Amigos ---
+  dom.tabButtons[1].handlers.click();
+  assert.strictEqual(dom.q('#tab-friends').hidden, false);
+  dom.q('#friendName').value = 'nadie';
+  await dom.q('#friendForm').handlers.submit({ preventDefault() {} });
+  assert(/No existe/.test(dom.q('#friendMsg').textContent), 'avisa si el usuario no existe');
+  dom.q('#friendName').value = 'bruno';
+  await dom.q('#friendForm').handlers.submit({ preventDefault() {} });
+  assert(/Solicitud enviada/.test(dom.q('#friendMsg').textContent));
+  assert(db._get('requests/uid-b-bruno/uid-a-ui'), 'la solicitud llegó a bruno');
+  await Social.acceptRequest(brunoH, bruno, 'uid-a-ui', 'ana_ui');
+  await db.settle(); await db.settle();
+  assert.strictEqual(dom.q('#friendList').children.length, 1, 'bruno aparece en la lista de amigos');
+  console.log('ok amigos en la interfaz');
+
+  // --- sala: crear, invitar, bruno entra, empezar, jugar, volver a la sala ---
+  dom.tabButtons[0].handlers.click();
+  dom.q('#createParty').handlers.click();
+  await db.settle(); await db.settle();
+  const partyId = Object.keys(db._get('parties') || {})[0];
+  assert(partyId, 'se creó la sala');
+  assert.strictEqual(dom.q('#party').hidden, false, 'se muestra la sala');
+  assert.strictEqual(dom.q('#modes').hidden, true);
+  assert.strictEqual(dom.q('#partyStart').disabled, true, 'no se puede empezar solo');
+  const row = dom.q('#partyFriends').children[0];
+  assert(row, 'bruno aparece para invitar');
+  row.children[1].handlers.click();                       // Invitar
+  await db.settle();
+  assert.strictEqual(db._get('invites/uid-b-bruno/uid-a-ui').party, partyId, 'la invitación llegó');
+  let brunoRoom = null;
+  Net.watchMatch(brunoH, 'uid-b-bruno', (id) => { brunoRoom = id; });
+  await Social.joinParty(brunoH, bruno, partyId, 2);
+  await db.settle(); await db.settle();
+  assert.strictEqual(dom.q('#partyMembers').children.length, 2, 'bruno aparece en la sala');
+  assert.strictEqual(dom.q('#partyStart').disabled, false, 'ahora sí se puede empezar');
+  dom.q('#partyStart').handlers.click();
+  await db.settle(); await db.settle();
+  assert(brunoRoom, 'bruno recibe la partida');
+  const pRoom = await Net.loadRoom(brunoH, brunoRoom);
+  assert.strictEqual(pRoom.host, 'uid-a-ui');
+  const pClient = Net.createClient(brunoH, brunoRoom, pRoom, 'uid-b-bruno', { Game });
+  dom.texts.length = 0;
+  await run(150, () => {
+    const v = pClient.view(), foe = v && v.fighters[0];
+    pClient.sendInput({ mx: 0, my: 0, ax: foe ? foe.x : 0, ay: foe ? foe.y : 0, fire: true, dash: false, special: false });
+  });
+  assert(dom.texts.some((t) => t === '¡VICTORIA!' || t === 'DERROTA'), 'se jugó la partida de la sala');
+  pClient.stop();
+  dom.key('Enter');
+  assert.strictEqual(dom.q('#ui').hidden, false);
+  assert.strictEqual(dom.q('#party').hidden, false, 'después de la partida se vuelve a la sala');
+  console.log('ok sala privada (UI anfitrión)');
+
+  // el anfitrión sale: la sala se cierra
+  dom.q('#partyLeave').handlers.click();
+  await db.settle(); await db.settle();
+  assert.strictEqual(db._get('parties/' + partyId), undefined, 'la sala se cerró');
+  assert.strictEqual(dom.q('#party').hidden, true); assert.strictEqual(dom.q('#modes').hidden, false);
+
+  // --- invitación recibida: bruno crea una sala e invita a la persona ---
+  const party2 = await Social.createParty(brunoH, bruno, 1);
+  await Social.sendInvite(brunoH, bruno, 'uid-a-ui', party2);
+  await db.settle(); await db.settle();
+  assert.strictEqual(dom.q('#invites').children.length, 1, 'aparece el aviso de invitación');
+  dom.q('#invites').children[0].children[1].children[0].handlers.click();   // Unirse
+  await db.settle(); await db.settle(); await db.settle();
+  assert(db._get('parties/' + party2 + '/members/uid-a-ui'), 'la persona entró a la sala de bruno');
+  assert.strictEqual(dom.q('#party').hidden, false);
+  assert.strictEqual(dom.q('#partyStart').hidden, true, 'un invitado no puede empezar');
+  assert.strictEqual(dom.q('#invites').children.length, 0, 'la invitación se limpia');
+  await Social.setMode(brunoH, party2, '2v2');            // 2v2: bruno + la persona contra 2 CPU? (equipos opuestos → 1+CPU vs 1+CPU)
+  await db.settle();
+  const startedRoom = await Social.startParty(brunoH, party2, db._get('parties/' + party2), { rng: () => 0.2 });
+  await db.settle(); await db.settle();
+  const sRoom = await Net.loadRoom(brunoH, startedRoom);
+  assert.strictEqual(sRoom.players.length, 4); assert.strictEqual(sRoom.players.filter((p) => p.cpu).length, 2);
+  const sHost = Net.createHost(brunoH, startedRoom, sRoom, 'uid-b-bruno', { Game });
+  dom.texts.length = 0;
+  await run(170, () => {
+    const g = sHost.game, me = g.fighters.findIndex((f, i) => sRoom.players[i].uid === 'uid-b-bruno');
+    const foe = g.fighters.find((f) => f.team !== g.fighters[me].team && f.hp > 0) || g.fighters[me];
+    sHost.tick({ mx: 0, my: 0, ax: foe.x, ay: foe.y, fire: true, dash: false, special: false }, 1 / 60);
+  });
+  assert(sHost.game.over, 'la partida 2v2 con CPU terminó');
+  assert(dom.texts.some((t) => t === '¡VICTORIA!' || t === 'DERROTA'), 'la persona ve el resultado');
+  assert(dom.texts.some((t) => /CPU/.test(t)), 'el HUD muestra a los CPU');
+  dom.key('Escape');
+  assert.strictEqual(dom.q('#party').hidden, false, 'vuelve a la sala de bruno');
+  // bruno cierra la sala: la persona vuelve al inicio con aviso
+  await Social.leaveParty(brunoH, bruno, party2, true);
+  await db.settle(); await db.settle();
+  assert.strictEqual(dom.q('#party').hidden, true);
+  assert(/La sala se cerró/.test(dom.q('#menuMsg').textContent), 'avisa que la sala se cerró');
+  sHost.stop();
+  console.log('ok sala privada (UI invitado)');
 
   // --- cancelar una búsqueda y cerrar sesión ---
   dom.onlineButtons[1].handlers.click();

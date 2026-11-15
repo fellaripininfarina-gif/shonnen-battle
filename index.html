@@ -48,7 +48,27 @@
     input { background: #0b0c12; color: #fff; border: 1px solid #2a2f42; border-radius: 8px; padding: 12px; font-size: 15px; }
     .err { color: #f87171; min-height: 1.2em; font-size: 14px; }
     form.card { margin: 0 auto; }
-    #lobby { margin: 20px auto; }
+    #lobby, #party { margin: 20px auto; }
+    #invites { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+    .invite { background: #262b40; border: 1px solid #ff7a3d; border-radius: 10px; padding: 10px 14px;
+      display: flex; gap: 10px; align-items: center; justify-content: space-between; text-align: left; }
+    .row { display: flex; gap: 10px; align-items: center; justify-content: space-between; padding: 8px 0;
+      border-bottom: 1px solid #2a2f42; text-align: left; flex-wrap: wrap; }
+    .row:last-child { border-bottom: 0; }
+    .row .who { display: flex; align-items: center; gap: 8px; }
+    .row .btns { display: flex; gap: 6px; }
+    .pres { width: 10px; height: 10px; border-radius: 50%; background: #445; display: inline-block; }
+    .pres.on { background: #4ade80; }
+    .mini { background: #2a2f42; color: #fff; border: 0; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 13px; }
+    .mini:hover:not(:disabled) { background: #3a4060; }
+    .mini:disabled { opacity: .4; cursor: not-allowed; }
+    .mini.on { background: #ff7a3d; color: #111; font-weight: 700; }
+    .mini.t0 { border-bottom: 3px solid #4ade80; }
+    .mini.t1 { border-bottom: 3px solid #f87171; }
+    select { background: #0b0c12; color: #fff; border: 1px solid #2a2f42; border-radius: 6px; padding: 6px; }
+    .panel { background: #151826; border: 1px solid #2a2f42; border-radius: 12px; padding: 16px 20px; margin: 0 auto 14px; max-width: 620px; text-align: left; }
+    .panel h3 { margin: 0 0 8px; }
+    .empty { color: #778; font-size: 14px; }
     #lobbyMsg { font-size: 20px; margin: 18px 0; }
     [hidden] { display: none !important; }
   </style>
@@ -56,9 +76,11 @@
 <body>
   <div id="ui">
     <div id="userbox"></div>
+    <div id="invites"></div>
     <h1>SHONEN BATTLE</h1>
     <nav>
       <button data-tab="play" class="on">Jugar</button>
+      <button data-tab="friends">Amigos</button>
       <button data-tab="news">Novedades</button>
     </nav>
 
@@ -76,6 +98,24 @@
           <button class="act" data-online="2v2" disabled>2v2 online</button>
           <button class="act" data-mode="2v2">Vs la computadora</button>
         </div>
+        <div class="card">
+          <h2>Amigos</h2>
+          <p>Armá una sala privada, invitá a tus amigos y jueguen 1v1 o 2v2.</p>
+          <button class="act" id="createParty" disabled>Crear sala</button>
+        </div>
+      </div>
+      <div id="party" class="panel" hidden>
+        <h3 id="partyTitle">Sala</h3>
+        <div class="row"><span>Modo</span>
+          <span class="btns"><button class="mini" data-pmode="1v1">1v1</button><button class="mini" data-pmode="2v2">2v2</button></span>
+        </div>
+        <div id="partyMembers"></div>
+        <div id="partyInviteBox">
+          <h3 style="margin-top:14px">Invitar amigos</h3>
+          <div id="partyFriends"></div>
+        </div>
+        <p id="partyMsg" class="err"></p>
+        <div class="row" style="border:0"><button class="act" id="partyStart">Empezar partida</button><button class="ghost" id="partyLeave" style="margin:0">Salir de la sala</button></div>
       </div>
       <p id="menuMsg" class="err"></p>
       <div id="pick" hidden>
@@ -96,6 +136,19 @@
 
     <section id="tab-news" hidden>
       <div id="news"></div>
+    </section>
+
+    <section id="tab-friends" hidden>
+      <form id="friendForm" class="panel">
+        <h3>Agregar un amigo</h3>
+        <div class="row" style="border:0">
+          <input id="friendName" placeholder="Usuario de tu amigo" maxlength="16" style="flex:1">
+          <button class="act" type="submit" id="friendSend">Enviar solicitud</button>
+        </div>
+        <p id="friendMsg" class="err"></p>
+      </form>
+      <div class="panel"><h3>Solicitudes recibidas</h3><div id="reqList"></div></div>
+      <div class="panel"><h3>Tus amigos</h3><div id="friendList"></div></div>
     </section>
 
     <section id="tab-auth" hidden>
@@ -121,6 +174,7 @@
   <script src="src/game.js"></script>
   <script src="src/auth.js"></script>
   <script src="src/net.js"></script>
+  <script src="src/social.js"></script>
   <script src="src/news.js"></script>
   <script src="src/main.js"></script>
 </body>
