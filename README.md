@@ -43,8 +43,15 @@ Usa Firebase (Authentication + Realtime Database), sin servidor propio.
 
 1. `src/config.js` tiene los datos públicos del proyecto `shonnen-battle`. Si la URL de la Realtime Database que muestra la consola es distinta a `databaseURL`, actualizala ahí.
 2. En la consola: **Authentication → Método de acceso → Correo electrónico/contraseña** activado.
-3. **Realtime Database → Reglas**: pegar el contenido de `database.rules.json` y publicar.
+3. **Realtime Database → Reglas**: pegar el contenido de `database.rules.json` y publicar (las reglas no se publican solas al subir el repo). Después probar en el juego: buscar partida, agregar un amigo y armar una sala.
 4. Recomendado: en Google Cloud → Credenciales, restringir la clave de API a los sitios `fellaripininfarina-gif.github.io` y `localhost`.
+
+### Qué protegen las reglas
+
+- Cada jugador solo escribe su propio perfil, presencia y controles; el nombre guardado tiene que coincidir con el de su cuenta.
+- Solo se puede agregar a alguien como amigo si hay una solicitud aceptada; las invitaciones exigen amistad.
+- Un jugador solo puede mandar a otro a una sala si él es el anfitrión de esa sala; los controles, modos y luchadores se validan.
+- Pendiente: no se comprueba que el jugador mandado a una sala esté en la cola o en la sala privada (haría falta un servidor o Cloud Functions).
 
 ## Tests
 
@@ -55,6 +62,7 @@ npm test
 o por separado:
 
 ```
+node test/rules.js   # revisión básica de las reglas de la base de datos
 node test/sim.js     # simulación IA vs IA en 1v1 y 2v2
 node test/net.js     # emparejamiento y partidas online con una base de datos simulada
 node test/social.js  # amigos, invitaciones y salas privadas
