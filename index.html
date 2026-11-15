@@ -4,14 +4,92 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Shonen Battle</title>
+  <meta name="description" content="Shonen Battle: juego de batallas 2D en tiempo real al estilo shonen, para jugar gratis en el navegador. Modos 1v1 y 2v2.">
   <style>
-    html, body { margin: 0; height: 100%; background: #0b0c12; display: flex; align-items: center; justify-content: center; }
-    canvas { width: min(100vw, 177.7vh); height: auto; aspect-ratio: 16 / 9; cursor: none; }
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; min-height: 100%; background: #0b0c12; color: #e8eaf2;
+      font-family: system-ui, -apple-system, 'Segoe UI', sans-serif; }
+    body { display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+    #ui { width: min(900px, 94vw); padding: 24px 0 40px; text-align: center; }
+    h1 { font-size: clamp(32px, 7vw, 56px); margin: 8px 0 18px; letter-spacing: 2px; }
+    nav { display: flex; gap: 8px; justify-content: center; margin-bottom: 24px; }
+    nav button { background: #1c2030; color: #9aa; border: 1px solid #2a2f42; padding: 10px 28px;
+      font-size: 16px; border-radius: 8px; cursor: pointer; }
+    nav button.on { color: #fff; border-color: #ff7a3d; background: #262b40; }
+    .modes { display: flex; gap: 16px; flex-wrap: wrap; justify-content: center; }
+    .card { background: #151826; border: 1px solid #2a2f42; border-radius: 12px; padding: 20px;
+      width: 260px; display: flex; flex-direction: column; gap: 10px; }
+    .card h2 { margin: 0; font-size: 34px; }
+    .card p { margin: 0 0 6px; color: #9aa; font-size: 14px; }
+    button.act { background: #ff7a3d; color: #111; border: 0; padding: 12px; border-radius: 8px;
+      font-size: 15px; font-weight: 700; cursor: pointer; }
+    button.act:hover:not(:disabled) { filter: brightness(1.1); }
+    button.act:disabled { background: #2a2f42; color: #778; cursor: not-allowed; }
+    button.act small { font-weight: 400; }
+    button.ghost { background: transparent; color: #9aa; border: 1px solid #2a2f42; padding: 8px 18px;
+      border-radius: 8px; cursor: pointer; margin-top: 16px; }
+    .chars { display: flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+    .char { width: 190px; background: #1c2030; border: 2px solid var(--c); border-radius: 12px;
+      padding: 16px 10px; cursor: pointer; color: inherit; font: inherit; }
+    .char:hover { background: #2a2f42; }
+    .dot { width: 54px; height: 54px; border-radius: 50%; background: var(--c); margin: 0 auto 10px; }
+    .char b { font-size: 20px; display: block; }
+    .char span { display: block; color: #9aa; font-size: 13px; margin-top: 4px; }
+    .help { color: #778; font-size: 13px; margin-top: 28px; line-height: 1.7; }
+    #news { text-align: left; display: flex; flex-direction: column; gap: 14px; }
+    .entry { background: #151826; border: 1px solid #2a2f42; border-radius: 12px; padding: 18px 22px; }
+    .entry time { color: #ff7a3d; font-size: 13px; font-weight: 700; }
+    .entry h3 { margin: 4px 0 8px; font-size: 20px; }
+    .entry ul { margin: 0; padding-left: 20px; color: #c8ccd8; line-height: 1.6; }
+    canvas { width: min(100vw, 177.7vh); height: auto; aspect-ratio: 16 / 9; cursor: none; display: block; }
+    [hidden] { display: none !important; }
   </style>
 </head>
 <body>
-  <canvas id="c"></canvas>
+  <div id="ui">
+    <h1>SHONEN BATTLE</h1>
+    <nav>
+      <button data-tab="play" class="on">Jugar</button>
+      <button data-tab="news">Novedades</button>
+    </nav>
+
+    <section id="tab-play">
+      <div id="modes" class="modes">
+        <div class="card">
+          <h2>1v1</h2>
+          <p>Un duelo, uno contra uno.</p>
+          <button class="act" disabled>1v1 online <small>(próximamente)</small></button>
+          <button class="act" data-mode="1v1">Vs la computadora</button>
+        </div>
+        <div class="card">
+          <h2>2v2</h2>
+          <p>Dos contra dos: vos y un aliado contra dos rivales.</p>
+          <button class="act" disabled>2v2 online <small>(próximamente)</small></button>
+          <button class="act" data-mode="2v2">Vs la computadora</button>
+        </div>
+      </div>
+      <div id="pick" hidden>
+        <h2 id="pickTitle"></h2>
+        <div id="chars" class="chars"></div>
+        <button class="ghost" id="back">Volver</button>
+      </div>
+      <p class="help">
+        WASD o flechas: mover · Mouse: apuntar · Click o J: disparar<br>
+        Espacio: esquivar · Click derecho o E: rayo · Esc: salir de la partida<br>
+        Llená la barra rosa para evolucionar en plena batalla.
+      </p>
+    </section>
+
+    <section id="tab-news" hidden>
+      <div id="news"></div>
+    </section>
+  </div>
+
+  <canvas id="c" hidden></canvas>
+
   <script src="src/game.js"></script>
+  <script src="src/news.js"></script>
   <script src="src/main.js"></script>
 </body>
 </html>

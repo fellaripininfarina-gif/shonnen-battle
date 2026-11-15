@@ -1,4 +1,5 @@
 // Lógica pura del juego (sin DOM). Funciona en el navegador y en Node (para tests).
+// Soporta N luchadores repartidos en 2 equipos (1v1, 2v2).
 (function (root) {
   const W = 960, H = 540, FR = 18; // arena y radio de luchador
 
@@ -28,8 +29,8 @@
     f.dmg = f.base.dmg * m.dmg;
   }
 
-  function createFighter(base, x, y, team) {
-    const f = { base, team, x, y, vx: 0, vy: 0, form: 0, power: 0, energy: 30,
+  function createFighter(id, base, team, x, y) {
+    const f = { id, base, team, x, y, vx: 0, vy: 0, form: 0, power: 0, energy: 30,
       shotCd: 0, dashCd: 0, dashT: 0, dashDx: 0, dashDy: 0, face: team === 0 ? 0 : Math.PI,
       prevFire: false, hurtT: 0 };
     applyForm(f);
@@ -37,15 +38,37 @@
     return f;
   }
 
-  function createGame(charA, charB, opts) {
+  // roster: [{ char, team }]. Se reparten verticalmente dentro de su equipo.
+  function createGame(roster, opts) {
     opts = opts || {};
-    return {
-      rng: opts.rng || Math.random,
-      time: 0, over: false, winner: -1, clash: null,
-      fighters: [createFighter(charA, 120, H / 2, 0), createFighter(charB, W - 120, H / 2, 1)],
-      shots: [], events: [],
-    };
+    const perTeam = [0, 0], seen = [0, 0];
+    roster.forEach((r) => perTeam[r.team]++);
+    const fighters = roster.map((r, id) => {
+      const n = perTeam[r.team], k = seen[r.team]++;
+      const y = n === 1 ? H / 2 : H / 2 + (k - (n - 1) / 2) * 180;
+      return createFighter(id, r.char, r.team, r.team === 0 ? 120 : W - 120, y);
+    });
+    return { rng: opts.rng || Math.random, time: 0, over: false, winner: -1, clash: null,
+      fighters, shots: [], events: [] };
   }
+
+  // Arma los participantes de un modo contra la computadora.
+  // El jugador humano siempre es el luchador 0 (equipo 0).
+  function makeRoster(mode, charIndex, rng) {
+    rng = rng || Math.random;
+    const others = CHARS.filter((_, i) => i !== charIndex);
+    for (let i = others.length - 1; i > 0; i--) { // mezcla
+      const j = Math.floor(rng() * (i + 1));
+      [others[i], others[j]] = [others[j], others[i]];
+    }
+    const me = { char: CHARS[charIndex], team: 0 };
+    if (mode === '2v2') {
+      return [me, { char: others[0], team: 0 }, { char: others[1], team: 1 }, { char: others[2], team: 1 }];
+    }
+    return [me, { char: others[0], team: 1 }];
+  }
+
+  function alive(f) { return f.hp > 0; }
 
   function addPower(s, f, amt) {
     f.power = Math.min(100, f.power + amt);
@@ -53,18 +76,24 @@
       f.form++; f.power = 0;
       applyForm(f);
       f.hp = Math.min(f.maxHp, f.hp + f.maxHp * 0.25);
-      s.events.push({ type: 'evolve', x: f.x, y: f.y, team: f.team, form: f.form });
+      s.events.push({ type: 'evolve', x: f.x, y: f.y, id: f.id, team: f.team, form: f.form });
     }
   }
 
   function damage(s, target, owner, amt) {
+    if (s.over || !alive(target)) return;
     target.hp = Math.max(0, target.hp - amt);
     target.hurtT = 0.15;
     addPower(s, target, amt * 0.6);
     addPower(s, owner, amt * 1.2);
     owner.energy = Math.min(100, owner.energy + amt * 0.8);
     s.events.push({ type: 'hit', x: target.x, y: target.y, amt });
-    if (target.hp <= 0 && !s.over) { s.over = true; s.winner = owner.team; }
+    if (!alive(target)) {
+      s.events.push({ type: 'down', x: target.x, y: target.y, id: target.id });
+      if (!s.fighters.some((f) => f.team === target.team && alive(f))) {
+        s.over = true; s.winner = owner.team;
+      }
+    }
   }
 
   function updateFighter(s, f, inp, dt) {
@@ -95,12 +124,12 @@
 
     if (inp.fire && f.shotCd <= 0) {
       f.shotCd = f.base.shotCd;
-      s.shots.push({ type: 'ki', owner: f.team, x: f.x, y: f.y,
+      s.shots.push({ type: 'ki', owner: f.id, team: f.team, x: f.x, y: f.y,
         vx: Math.cos(f.face) * 520, vy: Math.sin(f.face) * 520, r: 7, dmg: f.dmg, life: 2 });
     }
     if (inp.special && f.energy >= BEAM_COST) {
       f.energy -= BEAM_COST;
-      s.shots.push({ type: 'beam', owner: f.team, x: f.x, y: f.y,
+      s.shots.push({ type: 'beam', owner: f.id, team: f.team, x: f.x, y: f.y,
         vx: Math.cos(f.face) * 420, vy: Math.sin(f.face) * 420, r: 18, dmg: f.dmg * 4, life: 3 });
       s.events.push({ type: 'beam', x: f.x, y: f.y });
     }
@@ -111,27 +140,35 @@
       p.x += p.vx * dt; p.y += p.vy * dt; p.life -= dt;
       if (p.x < -40 || p.x > W + 40 || p.y < -40 || p.y > H + 40) p.life = 0;
       if (p.life <= 0) continue;
-      const target = s.fighters[1 - p.owner];
-      if (target.dashT > 0) continue; // invulnerable al esquivar
-      if (Math.hypot(p.x - target.x, p.y - target.y) < p.r + FR) {
-        damage(s, target, s.fighters[p.owner], p.dmg);
-        p.life = 0;
+      for (const t of s.fighters) {
+        if (t.team === p.team || !alive(t) || t.dashT > 0) continue; // aliados no se dañan; esquivar = invulnerable
+        if (Math.hypot(p.x - t.x, p.y - t.y) < p.r + FR) {
+          damage(s, t, s.fighters[p.owner], p.dmg);
+          p.life = 0;
+          break;
+        }
       }
     }
     // un rayo absorbe disparos enemigos
     const beams = s.shots.filter((p) => p.type === 'beam' && p.life > 0);
     for (const b of beams) {
       for (const p of s.shots) {
-        if (p.type === 'ki' && p.life > 0 && p.owner !== b.owner &&
+        if (p.type === 'ki' && p.life > 0 && p.team !== b.team &&
             Math.hypot(p.x - b.x, p.y - b.y) < p.r + b.r) p.life = 0;
       }
     }
-    // choque de rayos
-    const [b1, b2] = [beams.find((b) => b.owner === 0), beams.find((b) => b.owner === 1)];
-    if (b1 && b2 && Math.hypot(b1.x - b2.x, b1.y - b2.y) < b1.r + b2.r) {
-      b1.life = 0; b2.life = 0;
-      s.clash = { t: 2.2, push: [0, 0], x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 };
-      s.events.push({ type: 'clash', x: s.clash.x, y: s.clash.y });
+    // choque de rayos entre equipos distintos
+    outer:
+    for (const b1 of beams) {
+      for (const b2 of beams) {
+        if (b1.team < b2.team && Math.hypot(b1.x - b2.x, b1.y - b2.y) < b1.r + b2.r) {
+          b1.life = 0; b2.life = 0;
+          s.clash = { t: 2.2, a: b1.owner, b: b2.owner, push: { [b1.owner]: 0, [b2.owner]: 0 },
+            x: (b1.x + b2.x) / 2, y: (b1.y + b2.y) / 2 };
+          s.events.push({ type: 'clash', x: s.clash.x, y: s.clash.y });
+          break outer;
+        }
+      }
     }
     s.shots = s.shots.filter((p) => p.life > 0);
   }
@@ -140,52 +177,65 @@
     const c = s.clash;
     c.t -= dt;
     s.fighters.forEach((f, i) => {
-      if (inputs[i].fire && !f.prevFire) c.push[i]++;
-      f.prevFire = inputs[i].fire;
-      f.face = Math.atan2(inputs[i].ay - f.y, inputs[i].ax - f.x);
+      const inp = inputs[i];
+      if ((i === c.a || i === c.b) && inp.fire && !f.prevFire) c.push[i]++;
+      f.prevFire = !!inp.fire;
+      f.face = Math.atan2(inp.ay - f.y, inp.ax - f.x);
     });
     if (c.t <= 0) {
-      const [a, b] = c.push;
-      const F = s.fighters;
-      if (a === b) { damage(s, F[0], F[1], 12); damage(s, F[1], F[0], 12); }
-      else {
-        const w = a > b ? 0 : 1;
-        damage(s, F[1 - w], F[w], 30);
-      }
+      const A = s.fighters[c.a], B = s.fighters[c.b];
+      const pa = c.push[c.a], pb = c.push[c.b];
       s.clash = null;
+      if (pa === pb) { damage(s, A, B, 12); damage(s, B, A, 12); }
+      else if (pa > pb) damage(s, B, A, 30);
+      else damage(s, A, B, 30);
     }
   }
 
+  // inputs[i] = { mx, my, ax, ay, fire, dash, special } para el luchador i.
   function step(s, inputs, dt) {
     if (s.over) return;
     s.time += dt;
     if (s.clash) { stepClash(s, inputs, dt); return; }
-    s.fighters.forEach((f, i) => { updateFighter(s, f, inputs[i], dt); f.prevFire = inputs[i].fire; });
+    s.fighters.forEach((f, i) => {
+      if (alive(f)) updateFighter(s, f, inputs[i], dt);
+      f.prevFire = !!inputs[i].fire;
+    });
     updateShots(s, dt);
   }
 
-  // IA sencilla: mantiene distancia, esquiva, dispara y usa el rayo.
+  const IDLE = { mx: 0, my: 0, ax: 0, ay: 0, fire: false, dash: false, special: false };
+
+  // IA sencilla: ataca al enemigo vivo más cercano, mantiene distancia, esquiva y usa el rayo.
   function aiInput(s, i, mem) {
-    const me = s.fighters[i], foe = s.fighters[1 - i], r = s.rng;
+    const me = s.fighters[i], r = s.rng;
+    if (!alive(me)) return IDLE;
+    const foes = s.fighters.filter((f) => f.team !== me.team && alive(f));
+    if (!foes.length) return IDLE;
+    let foe = foes[0];
+    for (const f of foes) {
+      if (Math.hypot(f.x - me.x, f.y - me.y) < Math.hypot(foe.x - me.x, foe.y - me.y)) foe = f;
+    }
     mem.t = (mem.t || 0) - 1 / 60;
     if (mem.t <= 0) { mem.t = 0.4 + r() * 0.6; mem.strafe = r() < 0.5 ? -1 : 1; }
     const dx = foe.x - me.x, dy = foe.y - me.y, d = Math.hypot(dx, dy) || 1;
     const want = 260;
     const fwd = d > want + 40 ? 1 : d < want - 60 ? -1 : 0;
-    let mx = (dx / d) * fwd + (-dy / d) * mem.strafe * 0.8;
-    let my = (dy / d) * fwd + (dx / d) * mem.strafe * 0.8;
-    const danger = s.shots.some((p) => p.owner !== i && Math.hypot(p.x - me.x, p.y - me.y) < 110);
-    // apunta con un poco de adelanto
+    const mx = (dx / d) * fwd + (-dy / d) * mem.strafe * 0.8;
+    const my = (dy / d) * fwd + (dx / d) * mem.strafe * 0.8;
+    const danger = s.shots.some((p) => p.team !== me.team && Math.hypot(p.x - me.x, p.y - me.y) < 110);
     const lead = d / 520 * 0.5;
+    const c = s.clash;
+    const fire = c ? ((c.a === i || c.b === i) && r() < 0.5) : r() < 0.92;
     return {
       mx, my, ax: foe.x + foe.vx * lead, ay: foe.y + foe.vy * lead,
-      fire: r() < 0.92 && !s.clash ? true : (s.clash ? r() < 0.5 : false),
+      fire,
       dash: danger && r() < 0.25,
       special: me.energy >= BEAM_COST && r() < 0.05,
     };
   }
 
-  const api = { W, H, FR, CHARS, FORM_MULT, BEAM_COST, createGame, step, aiInput };
+  const api = { W, H, FR, CHARS, FORM_MULT, BEAM_COST, createGame, makeRoster, step, aiInput };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Game = api;
 })(typeof window !== 'undefined' ? window : globalThis);
