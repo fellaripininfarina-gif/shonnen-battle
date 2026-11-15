@@ -80,7 +80,7 @@ const tick = (ms = 10) => { clock += ms; };
   assert.strictEqual(players.length, 4);
   assert.deepStrictEqual(players.map((p) => p.team), [0, 0, 1, 1]);
   assert.strictEqual(players.filter((p) => p.cpu).length, 2);
-  assert(players.every((p) => p.char >= 0 && p.char < 4));
+  assert(players.every((p) => p.char >= 0 && p.char < require('../src/characters.js').list.length));
   // 2v2 con los dos humanos en el mismo equipo: contra 2 CPU
   players = S.buildPlayers({ ...party, members: { ...party.members, 'uid-bruno': { ...party.members['uid-bruno'], team: 0 } } });
   assert.deepStrictEqual(players.map((p) => p.team), [0, 0, 1, 1]);

@@ -3,22 +3,15 @@
 (function (root) {
   const W = 960, H = 540, FR = 18; // arena y radio de luchador
 
-  const CHARS = [
-    { id: 'kaito', name: 'Kaito', color: '#ff7a3d', hp: 100, speed: 210, dmg: 8, shotCd: 0.28,
-      forms: ['Base', 'Despertar', 'Ascensión'] },
-    { id: 'ryuu', name: 'Ryuu', color: '#e63946', hp: 140, speed: 170, dmg: 10, shotCd: 0.38,
-      forms: ['Base', 'Furia', 'Dragón Rojo'] },
-    { id: 'sora', name: 'Sora', color: '#4cc9f0', hp: 85, speed: 270, dmg: 6.5, shotCd: 0.2,
-      forms: ['Base', 'Relámpago', 'Cielo Roto'] },
-    { id: 'mira', name: 'Mira', color: '#b980f0', hp: 95, speed: 215, dmg: 9, shotCd: 0.3,
-      forms: ['Base', 'Eclipse', 'Luna Negra'] },
-  ];
+  // Los personajes viven en src/characters.js (catálogo).
+  const Characters = (typeof module !== 'undefined' && module.exports) ? require('./characters.js') : root.Characters;
+  const CHARS = Characters.list;
   const FORM_MULT = [
     { hp: 1, speed: 1, dmg: 1 },
     { hp: 1.2, speed: 1.12, dmg: 1.25 },
     { hp: 1.45, speed: 1.25, dmg: 1.6 },
   ];
-  const BEAM_COST = 60;
+  const BEAM_COST = Characters.BEAM_DEFAULT.cost; // costo por defecto; cada personaje puede definir el suyo
 
   function applyForm(f) {
     const m = FORM_MULT[f.form];
@@ -122,15 +115,16 @@
     f.x = Math.min(W - FR, Math.max(FR, f.x + f.vx * dt));
     f.y = Math.min(H - FR, Math.max(FR, f.y + f.vy * dt));
 
+    const ki = f.base.ki, beam = f.base.beam;
     if (inp.fire && f.shotCd <= 0) {
       f.shotCd = f.base.shotCd;
       s.shots.push({ type: 'ki', owner: f.id, team: f.team, x: f.x, y: f.y,
-        vx: Math.cos(f.face) * 520, vy: Math.sin(f.face) * 520, r: 7, dmg: f.dmg, life: 2 });
+        vx: Math.cos(f.face) * ki.speed, vy: Math.sin(f.face) * ki.speed, r: ki.r, dmg: f.dmg * ki.dmgMul, life: ki.life });
     }
-    if (inp.special && f.energy >= BEAM_COST) {
-      f.energy -= BEAM_COST;
+    if (inp.special && f.energy >= beam.cost) {
+      f.energy -= beam.cost;
       s.shots.push({ type: 'beam', owner: f.id, team: f.team, x: f.x, y: f.y,
-        vx: Math.cos(f.face) * 420, vy: Math.sin(f.face) * 420, r: 18, dmg: f.dmg * 4, life: 3 });
+        vx: Math.cos(f.face) * beam.speed, vy: Math.sin(f.face) * beam.speed, r: beam.r, dmg: f.dmg * beam.dmgMul, life: beam.life });
       s.events.push({ type: 'beam', x: f.x, y: f.y });
     }
   }
@@ -224,14 +218,14 @@
     const mx = (dx / d) * fwd + (-dy / d) * mem.strafe * 0.8;
     const my = (dy / d) * fwd + (dx / d) * mem.strafe * 0.8;
     const danger = s.shots.some((p) => p.team !== me.team && Math.hypot(p.x - me.x, p.y - me.y) < 110);
-    const lead = d / 520 * 0.5;
+    const lead = d / me.base.ki.speed * 0.5;
     const c = s.clash;
     const fire = c ? ((c.a === i || c.b === i) && r() < 0.5) : r() < 0.92;
     return {
       mx, my, ax: foe.x + foe.vx * lead, ay: foe.y + foe.vy * lead,
       fire,
       dash: danger && r() < 0.25,
-      special: me.energy >= BEAM_COST && r() < 0.05,
+      special: me.energy >= me.base.beam.cost && r() < 0.05,
     };
   }
 

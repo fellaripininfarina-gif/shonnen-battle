@@ -111,7 +111,7 @@
       f: game.fighters.map((f) => [R(f.x), R(f.y), R(f.hp * 10), R(f.maxHp * 10), R(f.energy), R(f.power),
         f.form, R(f.face * 100), f.dashT > 0 ? 1 : 0, f.hurtT > 0 ? 1 : 0]),
     };
-    if (game.shots.length) s.s = game.shots.map((p) => [p.type === 'beam' ? 1 : 0, p.owner, p.team, R(p.x), R(p.y)]);
+    if (game.shots.length) s.s = game.shots.map((p) => [p.type === 'beam' ? 1 : 0, p.owner, p.team, R(p.x), R(p.y), R(Math.atan2(p.vy, p.vx) * 100)]);
     if (c) s.cl = [c.a, c.b, c.push[c.a], c.push[c.b], R(c.t * 100)];
     if (evs && evs.length) s.ev = evs;
     return s;
@@ -126,7 +126,10 @@
         x: a[0], y: a[1], hp: a[2] / 10, maxHp: a[3] / 10, energy: a[4], power: a[5], form: a[6],
         face: a[7] / 100, dashT: a[8] ? 0.1 : 0, hurtT: a[9] ? 0.1 : 0, vx: 0, vy: 0,
       })),
-      shots: (s.s || []).map((a) => ({ type: a[0] ? 'beam' : 'ki', owner: a[1], team: a[2], x: a[3], y: a[4], r: a[0] ? 18 : 7 })),
+      shots: (s.s || []).map((a) => {
+        const b = meta[a[1]].base;
+        return { type: a[0] ? 'beam' : 'ki', owner: a[1], team: a[2], x: a[3], y: a[4], a: (a[5] || 0) / 100, r: a[0] ? b.beam.r : b.ki.r };
+      }),
       clash: s.cl ? { a: s.cl[0], b: s.cl[1], push: { [s.cl[0]]: s.cl[2], [s.cl[1]]: s.cl[3] }, t: s.cl[4] / 100 } : null,
       time: s.tm / 1000, over: !!s.ov, winner: s.w, cd: s.cd || 0,
       events: (s.ev || []).map((e) => ({ type: e.t, x: e.x, y: e.y, amt: e.a || 0, id: e.i || 0 })),

@@ -53,6 +53,14 @@ Usa Firebase (Authentication + Realtime Database), sin servidor propio.
 - Un jugador solo puede mandar a otro a una sala si él es el anfitrión de esa sala; los controles, modos y luchadores se validan.
 - Pendiente: no se comprueba que el jugador mandado a una sala esté en la cola o en la sala privada (haría falta un servidor o Cloud Functions).
 
+## Cómo agregar un personaje
+
+1. Poner los sprites en `assets/characters/<id>/`, una tira horizontal PNG por animación: `idle.png` (obligatoria), y opcionalmente `run.png`, `shoot.png`, `dash.png`, `hurt.png`. Todos los cuadros tienen el mismo tamaño y el ancho del archivo es `frameW × cantidad de cuadros`. Para tener un archivo por forma se usa `{f}` en el nombre (`idle_{f}.png` → `idle_0.png`, `idle_1.png`, `idle_2.png`).
+2. Agregar una entrada **al final** de `LIST` en `src/characters.js` (el orden es el id que viaja por la red: no reordenar ni borrar). Ahí van las estadísticas, las formas, las animaciones y las habilidades: `ki` (disparo básico) y `beam` (especial) con velocidad, tamaño, alcance, daño relativo, costo y su propio sprite.
+3. Correr `npm test`: `test/catalog.js` revisa que existan los archivos y que sus medidas coincidan con lo declarado.
+
+Si falta un sprite o no carga, el juego dibuja al personaje con el estilo por defecto. El límite actual es de 64 personajes (las reglas de la base de datos validan el número de luchador).
+
 ## Tests
 
 ```
@@ -62,6 +70,8 @@ npm test
 o por separado:
 
 ```
+node test/catalog.js # catálogo de personajes y medidas de sus sprites
+node test/sprites.js # elección de animaciones
 node test/rules.js   # revisión básica de las reglas de la base de datos
 node test/sim.js     # simulación IA vs IA en 1v1 y 2v2
 node test/net.js     # emparejamiento y partidas online con una base de datos simulada
@@ -74,6 +84,8 @@ Las pruebas online usan una base de datos simulada (`test/fakedb.js`); no tocan 
 
 ## Estructura
 
+- `src/characters.js`: catálogo de personajes (estadísticas, animaciones y habilidades).
+- `src/sprites.js`: carga y dibujo de sprites.
 - `src/game.js`: lógica pura (sin DOM), testeable en Node. Soporta N luchadores en 2 equipos.
 - `src/net.js`: cola de partidas, sala, anfitrión y cliente sobre Realtime Database.
 - `src/auth.js`: cuentas con usuario y contraseña.

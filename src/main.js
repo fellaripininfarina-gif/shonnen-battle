@@ -1,7 +1,7 @@
 // Menú (HTML), cuentas, partidas online, render, input y bucle principal (navegador).
 (function () {
   const { W, H, FR, CHARS, BEAM_COST, makeRoster, createGame, step, aiInput } = window.Game;
-  const Auth = window.Auth, Net = window.Net, Social = window.Social;
+  const Auth = window.Auth, Net = window.Net, Social = window.Social, Sprites = window.Sprites;
   const $ = (s) => document.querySelector(s);
   const canvas = $('#c'), ctx = canvas.getContext('2d');
   canvas.width = W; canvas.height = H;
@@ -52,6 +52,13 @@
     CHARS.forEach((c, i) => {
       const b = document.createElement('button'); b.className = 'char'; b.style.setProperty('--c', c.color);
       const dot = document.createElement('div'); dot.className = 'dot';
+      const th = Sprites && Sprites.thumb(c);
+      if (th) { // sprite del personaje en lugar del círculo de color
+        dot.className = 'thumb';
+        dot.style.width = '72px'; dot.style.height = Math.round(72 * th.frameH / th.frameW) + 'px';
+        dot.style.backgroundImage = 'url(' + th.src + ')';
+        dot.style.backgroundSize = (th.frames * 100) + '% 100%';
+      }
       const n = document.createElement('b'); n.textContent = (i + 1) + '. ' + c.name;
       const s1 = document.createElement('span'); s1.textContent = 'Vida ' + c.hp + ' · Vel ' + c.speed + ' · Daño ' + c.dmg;
       const s2 = document.createElement('span'); s2.textContent = c.forms.join(' → ');
@@ -410,7 +417,7 @@
     if (scene !== 'menu' && ['Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.code)) e.preventDefault();
     keys.add(e.code);
     const picking = scene === 'menu' && pendingMode && !$('#pick').hidden;
-    if (picking && e.code >= 'Digit1' && e.code <= 'Digit4') choose(+e.code.slice(5) - 1);
+    if (picking && e.code >= 'Digit1' && e.code <= 'Digit9' && +e.code.slice(5) <= CHARS.length) choose(+e.code.slice(5) - 1);
     if ((scene === 'play' || scene === 'over') && e.code === 'Escape') toMenu();
     if (scene === 'over' && e.code === 'Enter') toMenu();
   });
@@ -478,6 +485,7 @@
 
   // ---------- dibujo ----------
   const TEAM_COLOR = ['#4ade80', '#f87171'];
+  const moveMem = {}; // última posición de cada luchador, para elegir la animación de correr
 
   function drawFighter(f) {
     const col = f.base.color;
@@ -488,6 +496,16 @@
     if (f.form > 0 || f.dashT > 0) {
       ctx.fillStyle = col + '55'; ctx.beginPath(); ctx.arc(0, 0, auraR + 6, 0, 7); ctx.fill();
     }
+    ctx.restore();
+    let m = moveMem[f.id];
+    if (!m || m.g !== game) m = moveMem[f.id] = { g: game, x: f.x, y: f.y, moving: false };
+    const moved = Math.hypot(f.x - m.x, f.y - m.y) > 0.4;
+    m.moving = moved || (m.moving && Math.hypot(f.x - m.x, f.y - m.y) > 0.05); m.x = f.x; m.y = f.y;
+    if (Sprites && Sprites.drawFighter(ctx, f, m.moving, game.time)) {
+      if (f.id === youId) marker(f);
+      return;
+    }
+    ctx.save(); ctx.translate(f.x, f.y);
     ctx.fillStyle = f.hurtT > 0 ? '#fff' : col;
     ctx.beginPath(); ctx.arc(0, 0, FR, 0, 7); ctx.fill();
     ctx.rotate(f.face);
@@ -503,10 +521,11 @@
     }
     ctx.fillStyle = '#111'; ctx.beginPath(); ctx.arc(8, -5, 3, 0, 7); ctx.arc(8, 5, 3, 0, 7); ctx.fill();
     ctx.restore();
-    if (f.id === youId) { // marca del jugador
-      ctx.fillStyle = '#fff'; ctx.beginPath();
-      ctx.moveTo(f.x - 7, f.y - FR - 30); ctx.lineTo(f.x + 7, f.y - FR - 30); ctx.lineTo(f.x, f.y - FR - 20); ctx.fill();
-    }
+    if (f.id === youId) marker(f);
+  }
+  function marker(f) { // marca del jugador
+    ctx.fillStyle = '#fff'; ctx.beginPath();
+    ctx.moveTo(f.x - 7, f.y - FR - 30); ctx.lineTo(f.x + 7, f.y - FR - 30); ctx.lineTo(f.x, f.y - FR - 20); ctx.fill();
   }
 
   function bar(x, y, w, h, v, max, color, right) {
@@ -524,7 +543,7 @@
       const dead = f.hp <= 0;
       ctx.globalAlpha = dead ? 0.4 : 1;
       bar(x, y, 280, 16, f.hp, f.maxHp, '#4ade80', right);
-      bar(x, y + 20, 280, 7, f.energy, 100, f.energy >= BEAM_COST ? '#facc15' : '#a16207', right);
+      bar(x, y + 20, 280, 7, f.energy, 100, f.energy >= f.base.beam.cost ? '#facc15' : '#a16207', right);
       bar(x, y + 31, 280, 5, f.form === 2 ? 100 : f.power, 100, '#f472b6', right);
       ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif';
       ctx.textAlign = right ? 'right' : 'left';
@@ -554,6 +573,7 @@
     for (let y = 0; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
     game.fighters.forEach((f) => { if (f.hp > 0) drawFighter(f); });
     for (const p of game.shots) {
+      if (Sprites && Sprites.drawShot(ctx, { ...p, a: p.a !== undefined ? p.a : Math.atan2(p.vy, p.vx) }, game.fighters[p.owner].base, game.time)) continue;
       ctx.fillStyle = game.fighters[p.owner].base.color;
       ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = p.type === 'beam' ? 30 : 12;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();

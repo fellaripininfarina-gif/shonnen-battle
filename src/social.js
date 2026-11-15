@@ -9,7 +9,7 @@
 //   invites/{paraUid}/{deUid}   { name, party, t }
 //   parties/{id}                { host, hostName, mode, t, members:{ uid:{ name, char, team, t } } }
 (function (root) {
-  const NCHARS = 4;
+  const NCHARS = (typeof module !== 'undefined' && module.exports ? require('./characters.js') : root.Characters).list.length;
   const MAX_MEMBERS = 4;
   const norm = (n) => String(n || '').trim().toLowerCase();
 
