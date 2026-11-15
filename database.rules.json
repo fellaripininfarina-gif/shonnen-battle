@@ -1,0 +1,32 @@
+{
+  "rules": {
+    ".read": false,
+    ".write": false,
+    "queue": {
+      "$mode": {
+        ".read": "auth != null",
+        "$uid": {
+          ".write": "auth != null",
+          ".validate": "newData.hasChildren(['name', 'char', 't'])"
+        }
+      }
+    },
+    "matches": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null"
+      }
+    },
+    "rooms": {
+      "$room": {
+        ".read": "auth != null",
+        ".write": "auth != null && (!data.exists() || data.child('host').val() === auth.uid)",
+        "inputs": {
+          "$uid": {
+            ".write": "auth != null && auth.uid === $uid"
+          }
+        }
+      }
+    }
+  }
+}

@@ -11,8 +11,10 @@ window.NEWS = [
       'Evolución en plena batalla: golpeá y recibí golpes para cargar la barra rosa.',
       'Esquiva con invulnerabilidad, disparos de energía y rayos que pueden chocar.',
       'Modos 1v1 y 2v2 contra la computadora (en 2v2 jugás con un aliado controlado por la IA).',
+      'Cuentas de jugador: registrate con usuario y contraseña.',
+      'Partidas online 1v1 y 2v2: buscá partida y el juego te empareja con otros jugadores.',
+      'Si un jugador se desconecta en plena partida online, la IA toma su lugar.',
       'Nuevo menú con las pestañas Jugar y Novedades.',
-      'En camino: cuentas de jugador y partidas online.',
     ],
   },
 ];
