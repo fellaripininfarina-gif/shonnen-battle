@@ -19,6 +19,8 @@ window.NEWS = [
       'Cuando termina la partida volvés a la sala para jugar otra.',
       'Nuevo menú con las pestañas Jugar y Novedades.',
       'Nuevo luchador: Goku UI, con sprites animados y 3 formas (Base, UI Sign y Ultra Instinto).',
+      'Barra de habilidades abajo: cinco botones (click izquierdo, click derecho, Espacio, Q y E) que se van cargando y se iluminan cuando están listos. Paneles de luchador con retrato y vida en números.',
+      'El ataque básico sale una vez cada 0,5 segundos para todos los luchadores (mantené apretado el click); hace más daño por disparo.',
       'Nuevas habilidades para todos: Q lanza una onda de área y E una definitiva que atraviesa a los rivales (se carga con la barra celeste). El ataque fuerte (rayo) ahora es solo con click derecho.',
     ],
   },

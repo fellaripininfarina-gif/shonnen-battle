@@ -11,6 +11,7 @@
     { hp: 1.2, speed: 1.12, dmg: 1.25 },
     { hp: 1.45, speed: 1.25, dmg: 1.6 },
   ];
+  const DASH_CD = 0.9; // enfriamiento de la esquiva (Espacio)
   const BEAM_COST = Characters.BEAM_DEFAULT.cost; // costo por defecto; cada personaje puede definir el suyo
 
   function applyForm(f) {
@@ -106,7 +107,7 @@
       if (len < 0.1) { dx = Math.cos(f.face); dy = Math.sin(f.face); }
       const dl = Math.hypot(dx, dy) || 1;
       f.dashDx = dx / dl; f.dashDy = dy / dl;
-      f.dashT = 0.18; f.dashCd = 0.9;
+      f.dashT = 0.18; f.dashCd = DASH_CD;
       s.events.push({ type: 'dash', x: f.x, y: f.y });
     }
     if (f.dashT > 0) {
@@ -259,7 +260,7 @@
     };
   }
 
-  const api = { W, H, FR, CHARS, FORM_MULT, BEAM_COST, createGame, makeRoster, step, aiInput };
+  const api = { W, H, FR, CHARS, FORM_MULT, BEAM_COST, DASH_CD, createGame, makeRoster, step, aiInput };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Game = api;
 })(typeof window !== 'undefined' ? window : globalThis);

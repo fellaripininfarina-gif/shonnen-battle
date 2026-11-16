@@ -76,4 +76,38 @@ const seq = (g, over) => g.fighters.map((_, i) => (over[i] ? { ...idle, ...over[
   assert(Math.abs(d.shots[0].a) < 0.02, 'ángulo del disparo');
   console.log('ok red');
 }
+
+// --- ataque básico: uno cada 0,5 s para todos; mantener apretado o clickear rápido da lo mismo
+{
+  assert(C.list.every((c) => c.shotCd === 0.5), 'todos los luchadores atacan cada 0,5 s');
+  const count = (pattern) => {
+    const g = Game.createGame([{ char: goku, team: 0 }, { char: kaito, team: 1 }]);
+    g.fighters[1].x = 900; g.fighters[1].hp = g.fighters[1].maxHp = 1e6; // un blanco que no muere
+    let n = 0;
+    for (let i = 0; i < 120; i++) { // 2 segundos
+      const before = g.shots.length;
+      Game.step(g, seq(g, [{ fire: pattern(i), ax: 900, ay: 270 }]), 1 / 60);
+      if (g.shots.length > before) n++;
+    }
+    return n;
+  };
+  const held = count(() => true), spam = count((i) => i % 2 === 0), tap = count((i) => i % 6 === 0);
+  assert(held >= 4 && held <= 5, 'mantener apretado: ' + held + ' disparos en 2 s');
+  assert.strictEqual(spam, held, 'clickear rápido no acelera el ataque');
+  assert.strictEqual(tap, held, 'tocar cada 0,1 s tampoco');
+  console.log('ok ataque básico cada 0,5 s (' + held + ' en 2 s)');
+}
+
+// --- los tiempos de recarga viajan por la red (para la barra de habilidades de los clientes)
+{
+  const g = Game.createGame([{ char: goku, team: 0 }, { char: kaito, team: 1 }]);
+  g.fighters[0].energy = 100;
+  Game.step(g, seq(g, [{ fire: true, dash: true, q: true, ax: 900, ay: 270 }]), 1 / 60);
+  const meta = g.fighters.map((f) => ({ base: f.base, team: f.team, name: 'x' }));
+  const d = Net.decode(JSON.parse(JSON.stringify(Net.encode(g, 1, [], 0))), meta).fighters[0];
+  assert(Math.abs(d.shotCd - g.fighters[0].shotCd) < 0.011, 'ataque básico');
+  assert(Math.abs(d.dashCd - g.fighters[0].dashCd) < 0.011 && d.dashCd > 0.8, 'esquiva');
+  assert(Math.abs(d.qCd - g.fighters[0].qCd) < 0.011 && d.qCd > 3, 'habilidad Q');
+  console.log('ok recargas por red');
+}
 console.log('OK');

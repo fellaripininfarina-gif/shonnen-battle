@@ -1,6 +1,6 @@
 // Menú (HTML), cuentas, partidas online, render, input y bucle principal (navegador).
 (function () {
-  const { W, H, FR, CHARS, BEAM_COST, makeRoster, createGame, step, aiInput } = window.Game;
+  const { W, H, FR, CHARS, DASH_CD, makeRoster, createGame, step, aiInput } = window.Game;
   const Auth = window.Auth, Net = window.Net, Social = window.Social, Sprites = window.Sprites;
   const $ = (s) => document.querySelector(s);
   const canvas = $('#c'), ctx = canvas.getContext('2d');
@@ -498,12 +498,20 @@
 
   function drawFighter(f) {
     const col = f.base.color;
+    const spr = f.base.sprite;
     ctx.save(); ctx.translate(f.x, f.y);
-    ctx.strokeStyle = TEAM_COLOR[f.team]; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(0, 0, FR + 4, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
-    const auraR = FR + 6 + f.form * 6 + Math.sin(game.time * 12) * 2;
-    if (f.form > 0 || f.dashT > 0) {
-      ctx.fillStyle = col + '55'; ctx.beginPath(); ctx.arc(0, 0, auraR + 6, 0, 7); ctx.fill();
+    if (spr) { // con sprite: sombra y anillo del equipo en el piso, bajo los pies
+      const gy = (spr.frameH * (spr.scale || 1)) / 2 - 4 * (spr.scale || 1);
+      ctx.fillStyle = '#0006'; ctx.beginPath(); ctx.ellipse(0, gy, 24, 8, 0, 0, 7); ctx.fill();
+      ctx.strokeStyle = TEAM_COLOR[f.team]; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.ellipse(0, gy, 24, 8, 0, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
+    } else {
+      ctx.strokeStyle = TEAM_COLOR[f.team]; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(0, 0, FR + 4, 0, 7); ctx.stroke(); ctx.lineWidth = 1;
+      const auraR = FR + 6 + f.form * 6 + Math.sin(game.time * 12) * 2;
+      if (f.form > 0 || f.dashT > 0) {
+        ctx.fillStyle = col + '55'; ctx.beginPath(); ctx.arc(0, 0, auraR + 6, 0, 7); ctx.fill();
+      }
     }
     ctx.restore();
     let m = moveMem[f.id];
@@ -558,23 +566,79 @@
     ctx.strokeStyle = '#fff6'; ctx.strokeRect(x, y, w, h);
   }
 
+  // ---------- interfaz: paneles de luchadores y barra de habilidades ----------
+  function rr(x, y, w, h, r) { // rectángulo redondeado
+    ctx.beginPath(); ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
+  }
+
+  // Panel de un luchador: retrato, nombre, vida (con números), energía y evolución.
+  function panel(f, x, y, right) {
+    const w = 330, h = 62, dead = f.hp <= 0;
+    ctx.globalAlpha = dead ? 0.45 : 1;
+    rr(x, y, w, h, 8); ctx.fillStyle = '#0b1020dd'; ctx.fill();
+    ctx.strokeStyle = TEAM_COLOR[f.team]; ctx.lineWidth = 2; ctx.stroke(); ctx.lineWidth = 1;
+    const px = right ? x + w - 58 : x + 6, py = y + 4;
+    rr(px, py, 54, 54, 6); ctx.fillStyle = '#1b2338'; ctx.fill();
+    if (!(Sprites && Sprites.drawPortrait(ctx, f.base, px, py, 54))) {
+      ctx.fillStyle = f.base.color; ctx.beginPath(); ctx.arc(px + 27, py + 27, 18, 0, 7); ctx.fill();
+    }
+    const bx = right ? x + 8 : x + 66, bw = w - 76;
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif'; ctx.textAlign = right ? 'right' : 'left';
+    const who = f.name ? f.name + ' (' + f.base.name + ')' : f.base.name;
+    ctx.fillText(who + ' · ' + f.base.forms[f.form] + (f.id === youId ? ' · vos' : '') + (dead ? ' ✕' : ''), right ? bx + bw : bx, y + 16);
+    bar(bx, y + 22, bw, 15, f.hp, f.maxHp, '#4ade80', right);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 11px sans-serif'; ctx.textAlign = 'center';
+    ctx.fillText(Math.ceil(f.hp) + '/' + Math.ceil(f.maxHp), bx + bw / 2, y + 34);
+    bar(bx, y + 41, bw, 7, f.energy, 100, f.energy >= f.base.beam.cost ? '#facc15' : '#a16207', right);
+    bar(bx, y + 51, bw, 5, f.form === 2 ? 100 : f.power, 100, '#f472b6', right);
+    ctx.globalAlpha = 1;
+  }
+
+  // Estado de las 5 habilidades de un luchador: p = qué tan cargada está (0 a 1).
+  function skills(f) {
+    const b = f.base, kit = b.kit || {}, en = f.energy || 0;
+    const cd = (left, total) => (total > 0 ? 1 - Math.max(0, left || 0) / total : 1);
+    return [
+      { key: 'LMB', name: kit.lmb || 'Ataque', p: cd(f.shotCd, b.shotCd) },
+      { key: 'RMB', name: kit.rmb || 'Rayo', p: Math.min(1, en / b.beam.cost), cost: b.beam.cost },
+      { key: 'ESP', name: kit.esp || 'Esquiva', p: cd(f.dashCd, DASH_CD) },
+      { key: 'Q', name: kit.q || 'Onda', p: f.qCd > 0 ? cd(f.qCd, b.q.cd) : Math.min(1, en / b.q.cost), cost: b.q.cost },
+      { key: 'E', name: kit.e || 'Definitiva', p: Math.min(1, (f.ult || 0) / 100), ult: true },
+    ];
+  }
+
+  // Barra de habilidades: una pestaña-botón por habilidad que se va cargando hasta quedar lista.
+  function skillBar(f) {
+    const list = skills(f), bw = 128, bh = 46, gap = 8, x0 = (W - (list.length * bw + (list.length - 1) * gap)) / 2, y = H - bh - 10;
+    const dead = f.hp <= 0;
+    list.forEach((s, i) => {
+      const x = x0 + i * (bw + gap), ready = !dead && s.p >= 1;
+      ctx.globalAlpha = dead ? 0.4 : 1;
+      rr(x, y, bw, bh, 8); ctx.fillStyle = '#0f1a33'; ctx.fill();
+      ctx.save(); rr(x, y, bw, bh, 8); ctx.clip();
+      ctx.fillStyle = s.ult ? (ready ? '#f59e0b' : '#7c4a0a') : (ready ? '#3b82f6' : '#1d3f8f');
+      ctx.fillRect(x, y, bw * Math.max(0, Math.min(1, s.p)), bh);
+      ctx.restore();
+      rr(x, y, bw, bh, 8); ctx.strokeStyle = ready ? '#bfdbfe' : '#334155'; ctx.lineWidth = ready ? 2 : 1; ctx.stroke(); ctx.lineWidth = 1;
+      ctx.textAlign = 'center'; ctx.fillStyle = '#fff'; ctx.font = 'bold 14px sans-serif';
+      ctx.fillText(s.name, x + bw / 2, y + 22);
+      ctx.font = 'bold 10px sans-serif'; ctx.fillStyle = ready ? '#e0f2fe' : '#94a3b8';
+      ctx.fillText(s.key, x + bw / 2, y + 37);
+      if (s.cost) { ctx.textAlign = 'right'; ctx.fillText(String(s.cost), x + bw - 8, y + 14); }
+      ctx.globalAlpha = 1;
+    });
+  }
+
   function hud() {
     const idx = [0, 0];
     game.fighters.forEach((f) => {
       const k = idx[f.team]++, right = f.team === 1;
-      const x = right ? W - 300 : 20, y = 14 + k * 74;
-      const dead = f.hp <= 0;
-      ctx.globalAlpha = dead ? 0.4 : 1;
-      bar(x, y, 280, 16, f.hp, f.maxHp, '#4ade80', right);
-      bar(x, y + 20, 280, 7, f.energy, 100, f.energy >= f.base.beam.cost ? '#facc15' : '#a16207', right);
-      bar(x, y + 31, 280, 5, f.form === 2 ? 100 : f.power, 100, '#f472b6', right);
-      bar(x, y + 38, 280, 5, f.ult || 0, 100, (f.ult || 0) >= 100 ? '#ffffff' : '#38bdf8', right); // ulti (E)
-      ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif';
-      ctx.textAlign = right ? 'right' : 'left';
-      const who = f.name ? f.name + ' (' + f.base.name + ')' : f.base.name;
-      ctx.fillText(who + ' · ' + f.base.forms[f.form] + (f.id === youId ? ' · vos' : '') + (dead ? ' ✕' : ''), right ? W - 20 : 20, y + 52);
-      ctx.globalAlpha = 1;
+      panel(f, right ? W - 340 : 10, 10 + k * 70, right);
     });
+    const me = game.fighters[youId];
+    if (me) skillBar(me);
   }
 
   function countdown() {

@@ -87,6 +87,19 @@
     return 'draw';
   }
 
+  // Retrato (cabeza y torso del primer cuadro de idle) dentro de un cuadrado de lado "size". Devuelve false si no hay sprite.
+  function drawPortrait(ctx, base, x, y, size) {
+    const s = base.sprite;
+    if (!s || !s.anims || !s.anims.idle) return false;
+    const a = s.anims.idle, e = load(fileOf(s.dir, a.file, 0));
+    if (!e || !e.ok) return false;
+    const fw = a.frameW || s.frameW, fh = a.frameH || s.frameH, sh = Math.round(fh * 0.55);
+    const k = Math.min(size / fw, size / sh);
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(e.img, 0, 0, fw, sh, x + (size - fw * k) / 2, y + (size - sh * k) / 2, fw * k, sh * k);
+    return true;
+  }
+
   // Imagen para el selector de luchador: { src, frames, frameW, frameH } o null.
   function thumb(char) {
     const s = char.sprite;
@@ -95,7 +108,7 @@
     return { src: fileOf(s.dir, a.file, 0), frames: a.frames || 1, frameW: s.frameW, frameH: s.frameH };
   }
 
-  const api = { pickAnim, frameIndex, fileOf, drawFighter, drawShot, drawFx, thumb };
+  const api = { pickAnim, frameIndex, fileOf, drawFighter, drawShot, drawFx, drawPortrait, thumb };
   if (typeof module !== 'undefined' && module.exports) module.exports = api;
   else root.Sprites = api;
 })(typeof window !== 'undefined' ? window : globalThis);

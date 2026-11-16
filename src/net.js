@@ -111,7 +111,8 @@
     const s = {
       n, tm: R(game.time * 1000), ov: game.over ? 1 : 0, w: game.winner, cd: cd || 0,
       f: game.fighters.map((f) => [R(f.x), R(f.y), R(f.hp * 10), R(f.maxHp * 10), R(f.energy), R(f.power),
-        f.form, R(f.face * 100), f.dashT > 0 ? 1 : 0, f.hurtT > 0 ? 1 : 0, R(f.ult), f.actT > 0 ? Math.max(0, ACTS.indexOf(f.act)) : 0]),
+        f.form, R(f.face * 100), f.dashT > 0 ? 1 : 0, f.hurtT > 0 ? 1 : 0, R(f.ult), f.actT > 0 ? Math.max(0, ACTS.indexOf(f.act)) : 0,
+        R(Math.max(0, f.shotCd) * 100), R(Math.max(0, f.dashCd) * 100), R(Math.max(0, f.qCd) * 100)]),
     };
     if (game.shots.length) s.s = game.shots.map((p) => [Math.max(0, SHOT_TYPES.indexOf(p.type)), p.owner, p.team, R(p.x), R(p.y), R(Math.atan2(p.vy, p.vx) * 100)]);
     if (c) s.cl = [c.a, c.b, c.push[c.a], c.push[c.b], R(c.t * 100)];
@@ -128,6 +129,7 @@
         x: a[0], y: a[1], hp: a[2] / 10, maxHp: a[3] / 10, energy: a[4], power: a[5], form: a[6],
         face: a[7] / 100, dashT: a[8] ? 0.1 : 0, hurtT: a[9] ? 0.1 : 0, vx: 0, vy: 0,
         ult: a[10] || 0, act: ACTS[a[11] || 0] || '', actT: a[11] ? 0.1 : 0,
+        shotCd: (a[12] || 0) / 100, dashCd: (a[13] || 0) / 100, qCd: (a[14] || 0) / 100,
       })),
       shots: (s.s || []).map((a) => {
         const b = meta[a[1]].base;

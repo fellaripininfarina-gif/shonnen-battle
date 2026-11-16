@@ -22,6 +22,8 @@ for (const [i, mode] of ['1v1', '2v2'].entries()) {
   assert.strictEqual(dom.q('#c').hidden, false, 'el canvas se muestra al jugar');
   dom.key('KeyD'); dom.key('Space');
   for (let f = 0; f < 60 * 20; f++) dom.frame();
+  for (const t of ['LMB', 'RMB', 'ESP', 'Q', 'E']) assert(dom.texts.includes(t), 'la barra de habilidades muestra ' + t);
+  assert(dom.texts.includes(window.Game.CHARS[i].kit.lmb), 'la barra muestra el nombre del ataque básico');
   dom.key('Escape');
   assert.strictEqual(dom.q('#ui').hidden, false, 'Esc vuelve al menú');
   assert.strictEqual(dom.q('#c').hidden, true);

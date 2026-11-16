@@ -21,7 +21,7 @@ Menú:
 | --- | --- |
 | Mover | WASD / flechas |
 | Apuntar | Mouse |
-| Disparar | Click izquierdo / J |
+| Ataque básico (un disparo cada 0,5 s; mantené apretado, clickear más rápido no lo acelera) | Click izquierdo / J |
 | Esquivar (invulnerable un instante) | Espacio |
 | Ataque fuerte / rayo (cuesta energía) | Click derecho / K |
 | Habilidad de área (cuesta energía, se recarga) | Q |
@@ -30,7 +30,8 @@ Menú:
 
 - Si dos rayos de equipos distintos chocan, tocá J o click lo más rápido que puedas para ganar el choque.
 - Al golpear y recibir golpes se carga la barra rosa: al llenarse, tu luchador **evoluciona** en plena batalla.
-- La barra celeste (definitiva) se carga golpeando y recibiendo golpes. La definitiva es un rayo grande que atraviesa a todos los rivales.
+- Abajo hay una barra con las 5 habilidades como botones (nombre y tecla). Cada botón se va llenando mientras se recarga y se ilumina cuando está listo; el rayo y la onda Q también esperan a tener la energía suficiente (se muestra su costo).
+- La definitiva (E) se carga golpeando y recibiendo golpes, y es un rayo grande que atraviesa a todos los rivales.
 - En 2v2 el aliado no recibe daño de tus disparos. Gana el equipo que deja sin vida a todos los rivales.
 
 ## Cómo funciona el online

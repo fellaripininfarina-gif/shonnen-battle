@@ -4,7 +4,7 @@
 //
 // Campos de una entrada:
 //   id, name, color        identificación y color (HUD, efectos, respaldo si faltan sprites)
-//   hp, speed, dmg, shotCd vida, velocidad, daño del disparo y tiempo entre disparos (s)
+//   hp, speed, dmg, shotCd vida, velocidad, daño base y tiempo entre ataques básicos (BASIC_CD = 0,5 s para todos)
 //   forms                  nombres de las 3 formas (evolucionan en plena batalla)
 //   ki   (opcional)        disparo básico: { speed, r, life, dmgMul, sprite }
 //   beam (opcional)        ataque fuerte (clic derecho): { cost, speed, r, life, dmgMul, sprite }
@@ -20,30 +20,35 @@
 //     El sprite de ki/beam/ult: { dir, file, frames, fps, frameW, frameH, scale, anchorX } (se dibuja rotado hacia donde
 //     viaja; anchorX es qué parte del ancho queda sobre la posición del disparo: 0.9 = la cabeza).
 (function (root) {
-  const KI_DEFAULT = { speed: 520, r: 7, life: 2, dmgMul: 1 };
+  const KI_DEFAULT = { speed: 520, r: 7, life: 2, dmgMul: 1.8 }; // el ataque básico sale cada BASIC_CD segundos
   const BEAM_DEFAULT = { cost: 60, speed: 420, r: 18, life: 3, dmgMul: 4 };
+  const BASIC_CD = 0.5; // segundos entre ataques básicos (mantener el click dispara solo; clickear más rápido no acelera)
   const Q_DEFAULT = { cost: 30, cd: 4, radius: 110, dmgMul: 2.5, push: 90 };   // onda de ki alrededor del luchador
   const ULT_DEFAULT = { r: 40, speed: 560, life: 2.2, dmgMul: 9 };              // rayo definitivo que atraviesa
 
   const LIST = [
-    { id: 'kaito', name: 'Kaito', color: '#ff7a3d', hp: 100, speed: 210, dmg: 8, shotCd: 0.28,
-      forms: ['Base', 'Despertar', 'Ascensión'] },
-    { id: 'ryuu', name: 'Ryuu', color: '#e63946', hp: 140, speed: 170, dmg: 10, shotCd: 0.38,
-      forms: ['Base', 'Furia', 'Dragón Rojo'] },
-    { id: 'sora', name: 'Sora', color: '#4cc9f0', hp: 85, speed: 270, dmg: 6.5, shotCd: 0.2,
-      forms: ['Base', 'Relámpago', 'Cielo Roto'] },
-    { id: 'mira', name: 'Mira', color: '#b980f0', hp: 95, speed: 215, dmg: 9, shotCd: 0.3,
-      forms: ['Base', 'Eclipse', 'Luna Negra'] },
+    { id: 'kaito', name: 'Kaito', color: '#ff7a3d', hp: 100, speed: 210, dmg: 8, shotCd: BASIC_CD,
+      forms: ['Base', 'Despertar', 'Ascensión'],
+      kit: { lmb: 'Chispa', rmb: 'Rayo solar', esp: 'Esquiva', q: 'Llamarada', e: 'Supernova' } },
+    { id: 'ryuu', name: 'Ryuu', color: '#e63946', hp: 140, speed: 170, dmg: 10, shotCd: BASIC_CD,
+      forms: ['Base', 'Furia', 'Dragón Rojo'],
+      kit: { lmb: 'Garra', rmb: 'Rugido', esp: 'Esquiva', q: 'Sacudida', e: 'Dragón rojo' } },
+    { id: 'sora', name: 'Sora', color: '#4cc9f0', hp: 85, speed: 270, dmg: 6.5, shotCd: BASIC_CD,
+      forms: ['Base', 'Relámpago', 'Cielo Roto'],
+      kit: { lmb: 'Destello', rmb: 'Relámpago', esp: 'Esquiva', q: 'Trueno', e: 'Tormenta' } },
+    { id: 'mira', name: 'Mira', color: '#b980f0', hp: 95, speed: 215, dmg: 9, shotCd: BASIC_CD,
+      forms: ['Base', 'Eclipse', 'Luna Negra'],
+      kit: { lmb: 'Luz lunar', rmb: 'Rayo eclipse', esp: 'Esquiva', q: 'Pulso lunar', e: 'Luna negra' } },
   ];
 
   // ---------- Goku UI ----------
   // Sprites generados con tools/build-goku-ui.py. Forma 0 = Base, 1 = UI Sign (aura), 2 = Ultra Instinto (pelo plateado).
   const DIR = 'assets/characters/goku-ui';
   const GOKU = {
-    id: 'goku-ui', name: 'Goku UI', color: '#aab8ff', hp: 100, speed: 235, dmg: 8.5, shotCd: 0.24,
+    id: 'goku-ui', name: 'Goku UI', color: '#aab8ff', hp: 100, speed: 235, dmg: 8.5, shotCd: BASIC_CD,
     forms: ['Base', 'UI Sign', 'Ultra Instinto'],
     kit: { lmb: 'Ráfaga de ki', rmb: 'Kamehameha', esp: 'Esquiva instantánea', q: 'Onda de ki', e: 'Kamehameha definitivo' },
-    ki: { speed: 560, r: 7, life: 2, dmgMul: 1,
+    ki: { speed: 560, r: 7, life: 2, dmgMul: 1.8,
       sprite: { dir: DIR, file: 'ki.png', frames: 2, fps: 14, frameW: 54, frameH: 29, scale: 1, anchorX: 0.8 } },
     beam: { cost: 60, speed: 430, r: 18, life: 3, dmgMul: 4.5,
       sprite: { dir: DIR, file: 'beam.png', frames: 4, fps: 16, frameW: 172, frameH: 60, scale: 0.55, anchorX: 0.9 } },
