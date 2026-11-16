@@ -19,6 +19,8 @@
   const HOST_LOST_MS = 5000;  // sin instantáneas durante 5 s: se perdió el anfitrión
   const COUNTDOWN_MS = 3000;
   const R = Math.round;
+  const ACTS = ['', 'shoot', 'beam', 'ult', 'pulse']; // qué está haciendo un luchador (para su animación)
+  const SHOT_TYPES = ['ki', 'beam', 'ult'];
 
   function sortQueue(obj) {
     return Object.entries(obj || {})
@@ -109,9 +111,9 @@
     const s = {
       n, tm: R(game.time * 1000), ov: game.over ? 1 : 0, w: game.winner, cd: cd || 0,
       f: game.fighters.map((f) => [R(f.x), R(f.y), R(f.hp * 10), R(f.maxHp * 10), R(f.energy), R(f.power),
-        f.form, R(f.face * 100), f.dashT > 0 ? 1 : 0, f.hurtT > 0 ? 1 : 0]),
+        f.form, R(f.face * 100), f.dashT > 0 ? 1 : 0, f.hurtT > 0 ? 1 : 0, R(f.ult), f.actT > 0 ? Math.max(0, ACTS.indexOf(f.act)) : 0]),
     };
-    if (game.shots.length) s.s = game.shots.map((p) => [p.type === 'beam' ? 1 : 0, p.owner, p.team, R(p.x), R(p.y), R(Math.atan2(p.vy, p.vx) * 100)]);
+    if (game.shots.length) s.s = game.shots.map((p) => [Math.max(0, SHOT_TYPES.indexOf(p.type)), p.owner, p.team, R(p.x), R(p.y), R(Math.atan2(p.vy, p.vx) * 100)]);
     if (c) s.cl = [c.a, c.b, c.push[c.a], c.push[c.b], R(c.t * 100)];
     if (evs && evs.length) s.ev = evs;
     return s;
@@ -125,10 +127,12 @@
         id: i, base: meta[i].base, team: meta[i].team, name: meta[i].name,
         x: a[0], y: a[1], hp: a[2] / 10, maxHp: a[3] / 10, energy: a[4], power: a[5], form: a[6],
         face: a[7] / 100, dashT: a[8] ? 0.1 : 0, hurtT: a[9] ? 0.1 : 0, vx: 0, vy: 0,
+        ult: a[10] || 0, act: ACTS[a[11] || 0] || '', actT: a[11] ? 0.1 : 0,
       })),
       shots: (s.s || []).map((a) => {
         const b = meta[a[1]].base;
-        return { type: a[0] ? 'beam' : 'ki', owner: a[1], team: a[2], x: a[3], y: a[4], a: (a[5] || 0) / 100, r: a[0] ? b.beam.r : b.ki.r };
+        const type = SHOT_TYPES[a[0]] || 'ki';
+        return { type, owner: a[1], team: a[2], x: a[3], y: a[4], a: (a[5] || 0) / 100, r: b[type].r };
       }),
       clash: s.cl ? { a: s.cl[0], b: s.cl[1], push: { [s.cl[0]]: s.cl[2], [s.cl[1]]: s.cl[3] }, t: s.cl[4] / 100 } : null,
       time: s.tm / 1000, over: !!s.ov, winner: s.w, cd: s.cd || 0,
@@ -178,7 +182,7 @@
       else if (!game.clash) fire = r.held;
       r.lastFire = fire;
       const x = r.inp;
-      return { mx: x.mx || 0, my: x.my || 0, ax: x.ax || 0, ay: x.ay || 0, fire, dash: !!x.dash, special: !!x.special };
+      return { mx: x.mx || 0, my: x.my || 0, ax: x.ax || 0, ay: x.ay || 0, fire, dash: !!x.dash, special: !!x.special, q: !!x.q, ult: !!x.ult };
     }
 
     let ticks = 0, n = 0, evBuf = [], stopped = false;
@@ -225,8 +229,8 @@
     };
     stateRef.on('value', onState);
 
-    let seq = 0, fc = 0, prevFire = false, prevDash = false, prevSpecial = false;
-    let latchDash = false, latchSpecial = false, lastSend = -1e9;
+    let seq = 0, fc = 0, prevFire = false, prevDash = false, prevSpecial = false, prevQ = false, prevUlt = false;
+    let latchDash = false, latchSpecial = false, latchQ = false, latchUlt = false, lastSend = -1e9;
     // Se llama una vez por cuadro con los controles actuales.
     function sendInput(inp) {
       const t = now();
@@ -234,15 +238,18 @@
       if (rise) fc++;
       if (dRise) latchDash = true;
       if (sRise) latchSpecial = true;
-      prevFire = !!inp.fire; prevDash = !!inp.dash; prevSpecial = !!inp.special;
-      if (rise || dRise || sRise || t - lastSend >= INPUT_MS) {
+      const qRise = !!inp.q && !prevQ, uRise = !!inp.ult && !prevUlt;
+      if (qRise) latchQ = true;
+      if (uRise) latchUlt = true;
+      prevFire = !!inp.fire; prevDash = !!inp.dash; prevSpecial = !!inp.special; prevQ = !!inp.q; prevUlt = !!inp.ult;
+      if (rise || dRise || sRise || qRise || uRise || t - lastSend >= INPUT_MS) {
         lastSend = t;
         inRef.set({
           mx: R(inp.mx * 100) / 100, my: R(inp.my * 100) / 100, ax: R(inp.ax), ay: R(inp.ay),
-          fire: inp.fire ? 1 : 0, dash: (inp.dash || latchDash) ? 1 : 0, special: (inp.special || latchSpecial) ? 1 : 0,
+          fire: inp.fire ? 1 : 0, dash: (inp.dash || latchDash) ? 1 : 0, special: (inp.special || latchSpecial) ? 1 : 0, q: (inp.q || latchQ) ? 1 : 0, ult: (inp.ult || latchUlt) ? 1 : 0,
           fc, seq: ++seq,
         }).catch(() => {});
-        latchDash = latchSpecial = false;
+        latchDash = latchSpecial = latchQ = latchUlt = false;
       }
     }
     // Estado para dibujar: posiciones de los luchadores interpoladas entre las dos últimas instantáneas.

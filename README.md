@@ -23,11 +23,14 @@ Menú:
 | Apuntar | Mouse |
 | Disparar | Click izquierdo / J |
 | Esquivar (invulnerable un instante) | Espacio |
-| Rayo (cuesta 60 de energía) | Click derecho / E |
+| Ataque fuerte / rayo (cuesta energía) | Click derecho / K |
+| Habilidad de área (cuesta energía, se recarga) | Q |
+| Definitiva (se usa con la barra celeste llena) | E |
 | Salir de la partida | Esc |
 
 - Si dos rayos de equipos distintos chocan, tocá J o click lo más rápido que puedas para ganar el choque.
 - Al golpear y recibir golpes se carga la barra rosa: al llenarse, tu luchador **evoluciona** en plena batalla.
+- La barra celeste (definitiva) se carga golpeando y recibiendo golpes. La definitiva es un rayo grande que atraviesa a todos los rivales.
 - En 2v2 el aliado no recibe daño de tus disparos. Gana el equipo que deja sin vida a todos los rivales.
 
 ## Cómo funciona el online
@@ -56,7 +59,8 @@ Usa Firebase (Authentication + Realtime Database), sin servidor propio.
 ## Cómo agregar un personaje
 
 1. Poner los sprites en `assets/characters/<id>/`, una tira horizontal PNG por animación: `idle.png` (obligatoria), y opcionalmente `run.png`, `shoot.png`, `dash.png`, `hurt.png`. Todos los cuadros tienen el mismo tamaño y el ancho del archivo es `frameW × cantidad de cuadros`. Para tener un archivo por forma se usa `{f}` en el nombre (`idle_{f}.png` → `idle_0.png`, `idle_1.png`, `idle_2.png`).
-2. Agregar una entrada **al final** de `LIST` en `src/characters.js` (el orden es el id que viaja por la red: no reordenar ni borrar). Ahí van las estadísticas, las formas, las animaciones y las habilidades: `ki` (disparo básico) y `beam` (especial) con velocidad, tamaño, alcance, daño relativo, costo y su propio sprite.
+   Si los cuadros vienen sueltos (un PNG por cuadro), se arman con un script como `tools/build-goku-ui.py` (ejemplo completo: alinea los cuadros, genera las formas y exporta las tiras).
+2. Agregar una entrada **al final** de `LIST` en `src/characters.js` (el orden es el id que viaja por la red: no reordenar ni borrar). Ahí van las estadísticas, las formas, las animaciones y las habilidades: `ki` (clic izquierdo), `beam` (clic derecho), `q` (área) y `ult` (definitiva), con velocidad, tamaño, alcance, daño relativo, costo y su propio sprite. Cada personaje usa los valores por defecto de las habilidades que no define.
 3. Correr `npm test`: `test/catalog.js` revisa que existan los archivos y que sus medidas coincidan con lo declarado.
 
 Si falta un sprite o no carga, el juego dibuja al personaje con el estilo por defecto. El límite actual es de 64 personajes (las reglas de la base de datos validan el número de luchador).
@@ -72,6 +76,7 @@ o por separado:
 ```
 node test/catalog.js # catálogo de personajes y medidas de sus sprites
 node test/sprites.js # elección de animaciones
+node test/kit.js     # habilidades: onda Q, definitiva E, barra de ulti
 node test/rules.js   # revisión básica de las reglas de la base de datos
 node test/sim.js     # simulación IA vs IA en 1v1 y 2v2
 node test/net.js     # emparejamiento y partidas online con una base de datos simulada
@@ -86,6 +91,7 @@ Las pruebas online usan una base de datos simulada (`test/fakedb.js`); no tocan 
 
 - `src/characters.js`: catálogo de personajes (estadísticas, animaciones y habilidades).
 - `src/sprites.js`: carga y dibujo de sprites.
+- `tools/build-goku-ui.py`: arma las tiras de Goku UI a partir de los cuadros sueltos.
 - `src/game.js`: lógica pura (sin DOM), testeable en Node. Soporta N luchadores en 2 equipos.
 - `src/net.js`: cola de partidas, sala, anfitrión y cliente sobre Realtime Database.
 - `src/auth.js`: cuentas con usuario y contraseña.

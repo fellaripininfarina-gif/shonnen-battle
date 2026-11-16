@@ -18,6 +18,8 @@ window.NEWS = [
       'Salas privadas: creá una sala, invitá a tus amigos, elegí 1v1 o 2v2 y jueguen. En 2v2 la computadora completa los lugares libres.',
       'Cuando termina la partida volvés a la sala para jugar otra.',
       'Nuevo menú con las pestañas Jugar y Novedades.',
+      'Nuevo luchador: Goku UI, con sprites animados y 3 formas (Base, UI Sign y Ultra Instinto).',
+      'Nuevas habilidades para todos: Q lanza una onda de área y E una definitiva que atraviesa a los rivales (se carga con la barra celeste). El ataque fuerte (rayo) ahora es solo con click derecho.',
     ],
   },
 ];

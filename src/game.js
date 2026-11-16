@@ -25,7 +25,7 @@
   function createFighter(id, base, team, x, y) {
     const f = { id, base, team, x, y, vx: 0, vy: 0, form: 0, power: 0, energy: 30,
       shotCd: 0, dashCd: 0, dashT: 0, dashDx: 0, dashDy: 0, face: team === 0 ? 0 : Math.PI,
-      prevFire: false, hurtT: 0 };
+      prevFire: false, hurtT: 0, ult: 0, qCd: 0, act: '', actT: 0 };
     applyForm(f);
     f.hp = f.maxHp;
     return f;
@@ -79,6 +79,8 @@
     target.hurtT = 0.15;
     addPower(s, target, amt * 0.6);
     addPower(s, owner, amt * 1.2);
+    owner.ult = Math.min(100, owner.ult + amt * 0.9);   // la barra de ulti se carga golpeando y recibiendo golpes
+    target.ult = Math.min(100, target.ult + amt * 0.5);
     owner.energy = Math.min(100, owner.energy + amt * 0.8);
     s.events.push({ type: 'hit', x: target.x, y: target.y, amt });
     if (!alive(target)) {
@@ -90,7 +92,8 @@
   }
 
   function updateFighter(s, f, inp, dt) {
-    f.shotCd -= dt; f.dashCd -= dt; f.hurtT -= dt;
+    f.shotCd -= dt; f.dashCd -= dt; f.hurtT -= dt; f.qCd -= dt; f.actT -= dt;
+    if (f.actT <= 0) f.act = '';
     f.energy = Math.min(100, f.energy + 8 * dt);
     f.face = Math.atan2(inp.ay - f.y, inp.ax - f.x);
 
@@ -117,15 +120,39 @@
 
     const ki = f.base.ki, beam = f.base.beam;
     if (inp.fire && f.shotCd <= 0) {
-      f.shotCd = f.base.shotCd;
+      f.shotCd = f.base.shotCd; f.act = 'shoot'; f.actT = 0.18;
       s.shots.push({ type: 'ki', owner: f.id, team: f.team, x: f.x, y: f.y,
         vx: Math.cos(f.face) * ki.speed, vy: Math.sin(f.face) * ki.speed, r: ki.r, dmg: f.dmg * ki.dmgMul, life: ki.life });
     }
     if (inp.special && f.energy >= beam.cost) {
-      f.energy -= beam.cost;
+      f.energy -= beam.cost; f.act = 'beam'; f.actT = 0.5;
       s.shots.push({ type: 'beam', owner: f.id, team: f.team, x: f.x, y: f.y,
         vx: Math.cos(f.face) * beam.speed, vy: Math.sin(f.face) * beam.speed, r: beam.r, dmg: f.dmg * beam.dmgMul, life: beam.life });
       s.events.push({ type: 'beam', x: f.x, y: f.y });
+    }
+    const q = f.base.q, ult = f.base.ult;
+    if (inp.q && f.qCd <= 0 && f.energy >= q.cost) { // onda de área: daña y empuja a los rivales cercanos
+      f.energy -= q.cost; f.qCd = q.cd; f.act = 'pulse'; f.actT = 0.45;
+      s.events.push({ type: 'pulse', x: f.x, y: f.y, id: f.id });
+      for (const p of s.shots) {
+        if (p.type === 'ki' && p.team !== f.team && Math.hypot(p.x - f.x, p.y - f.y) < q.radius) p.life = 0;
+      }
+      for (const t of s.fighters) {
+        if (t.team === f.team || !alive(t) || t.dashT > 0) continue;
+        const dx = t.x - f.x, dy = t.y - f.y, d = Math.hypot(dx, dy);
+        if (d > q.radius) continue;
+        damage(s, t, f, f.dmg * q.dmgMul);
+        const k = d || 1;
+        t.x = Math.min(W - FR, Math.max(FR, t.x + (dx / k) * q.push));
+        t.y = Math.min(H - FR, Math.max(FR, t.y + (dy / k) * q.push));
+      }
+    }
+    if (inp.ult && f.ult >= 100) { // definitiva: rayo grande que atraviesa a todos los rivales
+      f.ult = 0; f.act = 'ult'; f.actT = 0.8;
+      s.shots.push({ type: 'ult', owner: f.id, team: f.team, x: f.x, y: f.y,
+        vx: Math.cos(f.face) * ult.speed, vy: Math.sin(f.face) * ult.speed, r: ult.r, dmg: f.dmg * ult.dmgMul,
+        life: ult.life, pierce: true, hit: {} });
+      s.events.push({ type: 'ult', x: f.x, y: f.y, id: f.id });
     }
   }
 
@@ -136,10 +163,11 @@
       if (p.life <= 0) continue;
       for (const t of s.fighters) {
         if (t.team === p.team || !alive(t) || t.dashT > 0) continue; // aliados no se dañan; esquivar = invulnerable
+        if (p.pierce && p.hit[t.id]) continue;
         if (Math.hypot(p.x - t.x, p.y - t.y) < p.r + FR) {
           damage(s, t, s.fighters[p.owner], p.dmg);
-          p.life = 0;
-          break;
+          if (!p.pierce) { p.life = 0; break; }
+          p.hit[t.id] = true; // atraviesa: cada rival recibe el golpe una sola vez
         }
       }
     }
@@ -186,7 +214,7 @@
     }
   }
 
-  // inputs[i] = { mx, my, ax, ay, fire, dash, special } para el luchador i.
+  // inputs[i] = { mx, my, ax, ay, fire, dash, special, q, ult } para el luchador i.
   function step(s, inputs, dt) {
     if (s.over) return;
     s.time += dt;
@@ -198,7 +226,7 @@
     updateShots(s, dt);
   }
 
-  const IDLE = { mx: 0, my: 0, ax: 0, ay: 0, fire: false, dash: false, special: false };
+  const IDLE = { mx: 0, my: 0, ax: 0, ay: 0, fire: false, dash: false, special: false, q: false, ult: false };
 
   // IA sencilla: ataca al enemigo vivo más cercano, mantiene distancia, esquiva y usa el rayo.
   function aiInput(s, i, mem) {
@@ -226,6 +254,8 @@
       fire,
       dash: danger && r() < 0.25,
       special: me.energy >= me.base.beam.cost && r() < 0.05,
+      q: me.qCd <= 0 && me.energy >= me.base.q.cost && d < me.base.q.radius * 0.85 && r() < 0.15,
+      ult: me.ult >= 100 && r() < 0.06,
     };
   }
 

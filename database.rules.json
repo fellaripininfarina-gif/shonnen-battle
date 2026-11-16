@@ -42,6 +42,8 @@
             "fire": { ".validate": "newData.val() === 0 || newData.val() === 1" },
             "dash": { ".validate": "newData.val() === 0 || newData.val() === 1" },
             "special": { ".validate": "newData.val() === 0 || newData.val() === 1" },
+            "q": { ".validate": "newData.val() === 0 || newData.val() === 1" },
+            "ult": { ".validate": "newData.val() === 0 || newData.val() === 1" },
             "fc": { ".validate": "newData.isNumber()" },
             "seq": { ".validate": "newData.isNumber()" },
             "$other": { ".validate": false }

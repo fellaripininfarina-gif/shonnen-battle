@@ -63,6 +63,7 @@
       const s1 = document.createElement('span'); s1.textContent = 'Vida ' + c.hp + ' · Vel ' + c.speed + ' · Daño ' + c.dmg;
       const s2 = document.createElement('span'); s2.textContent = c.forms.join(' → ');
       b.append(dot, n, s1, s2);
+      if (c.kit) { const s3 = document.createElement('span'); s3.textContent = 'Q: ' + c.kit.q + ' · E: ' + c.kit.e; b.appendChild(s3); }
       b.addEventListener('click', () => choose(i));
       box.appendChild(b);
     });
@@ -439,7 +440,9 @@
       ax: mouse.x, ay: mouse.y,
       fire: mouse.down || k('KeyJ'),
       dash: k('Space') || k('ShiftLeft'),
-      special: mouse.right || k('KeyE') || k('KeyK'),
+      special: mouse.right || k('KeyK'),
+      q: k('KeyQ'),
+      ult: k('KeyE'),
     };
   }
 
@@ -454,6 +457,11 @@
     for (const e of list) {
       if (e.type === 'hit') { shake = Math.min(14, shake + 3 + e.amt * 0.3); burst(e.x, e.y, '#fff', 8); }
       if (e.type === 'evolve' && game && game.fighters[e.id]) { shake = 16; burst(e.x, e.y, game.fighters[e.id].base.color, 40); }
+      if (e.type === 'pulse' && game && game.fighters[e.id]) {
+        shake = Math.max(shake, 9); burst(e.x, e.y, game.fighters[e.id].base.color, 24);
+        pulses.push({ x: e.x, y: e.y, t: performance.now() / 1000, base: game.fighters[e.id].base });
+      }
+      if (e.type === 'ult' && game && game.fighters[e.id]) { shake = 18; burst(e.x, e.y, '#ffffff', 50); }
       if (e.type === 'clash') { shake = 10; burst(e.x, e.y, '#fff', 30); }
       if (e.type === 'down') { shake = 14; burst(e.x, e.y, '#f87171', 40); }
       if (e.type === 'dash') burst(e.x, e.y, '#9ef', 6);
@@ -485,6 +493,7 @@
 
   // ---------- dibujo ----------
   const TEAM_COLOR = ['#4ade80', '#f87171'];
+  const pulses = [];  // efectos de la habilidad Q en pantalla
   const moveMem = {}; // última posición de cada luchador, para elegir la animación de correr
 
   function drawFighter(f) {
@@ -523,6 +532,20 @@
     ctx.restore();
     if (f.id === youId) marker(f);
   }
+  // Onda de la habilidad Q: con el sprite del personaje, o un anillo que se expande si no tiene.
+  function drawPulses() {
+    const now = performance.now() / 1000;
+    for (let i = pulses.length - 1; i >= 0; i--) {
+      const p = pulses[i], age = now - p.t;
+      const r = Sprites ? Sprites.drawFx(ctx, p.base, p.x, p.y, age) : 'none';
+      if (r === 'done' || (r === 'none' && age > 0.4)) { pulses.splice(i, 1); continue; }
+      if (r === 'none') {
+        ctx.strokeStyle = p.base.color; ctx.globalAlpha = 1 - age / 0.4; ctx.lineWidth = 6;
+        ctx.beginPath(); ctx.arc(p.x, p.y, p.base.q.radius * (age / 0.4), 0, 7); ctx.stroke();
+        ctx.globalAlpha = 1; ctx.lineWidth = 1;
+      }
+    }
+  }
   function marker(f) { // marca del jugador
     ctx.fillStyle = '#fff'; ctx.beginPath();
     ctx.moveTo(f.x - 7, f.y - FR - 30); ctx.lineTo(f.x + 7, f.y - FR - 30); ctx.lineTo(f.x, f.y - FR - 20); ctx.fill();
@@ -545,6 +568,7 @@
       bar(x, y, 280, 16, f.hp, f.maxHp, '#4ade80', right);
       bar(x, y + 20, 280, 7, f.energy, 100, f.energy >= f.base.beam.cost ? '#facc15' : '#a16207', right);
       bar(x, y + 31, 280, 5, f.form === 2 ? 100 : f.power, 100, '#f472b6', right);
+      bar(x, y + 38, 280, 5, f.ult || 0, 100, (f.ult || 0) >= 100 ? '#ffffff' : '#38bdf8', right); // ulti (E)
       ctx.fillStyle = '#fff'; ctx.font = 'bold 13px sans-serif';
       ctx.textAlign = right ? 'right' : 'left';
       const who = f.name ? f.name + ' (' + f.base.name + ')' : f.base.name;
@@ -572,10 +596,11 @@
     for (let x = 0; x < W; x += 60) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
     for (let y = 0; y < H; y += 60) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
     game.fighters.forEach((f) => { if (f.hp > 0) drawFighter(f); });
+    drawPulses();
     for (const p of game.shots) {
       if (Sprites && Sprites.drawShot(ctx, { ...p, a: p.a !== undefined ? p.a : Math.atan2(p.vy, p.vx) }, game.fighters[p.owner].base, game.time)) continue;
       ctx.fillStyle = game.fighters[p.owner].base.color;
-      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = p.type === 'beam' ? 30 : 12;
+      ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = p.type === 'ult' ? 50 : p.type === 'beam' ? 30 : 12;
       ctx.beginPath(); ctx.arc(p.x, p.y, p.r, 0, 7); ctx.fill();
     }
     ctx.shadowBlur = 0;
